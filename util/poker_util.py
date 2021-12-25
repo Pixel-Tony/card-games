@@ -5,9 +5,9 @@ import socket
 
 # Constants
 SPADE, HEART, CLUB, DIAMOND = '♠','♥','♣','♦'
-suits = [SPADE, HEART, CLUB, DIAMOND]
+SUITS = [SPADE, HEART, CLUB, DIAMOND]
 ORDER = [*range(2, 11), *'JQKA']
-DECK = [(index, suit) for suit in suits for index in ORDER]
+DECK = [(index, suit) for suit in SUITS for index in ORDER]
 
 # Poker stuff
 def add_to(msg:list, options:list, *args:str):
@@ -222,10 +222,22 @@ def f_all(output, lst:list, kwarg=None, *values) -> list:
     '''Return list of `output` parameter of items in `lst` if item.`kwarg` (or item[`kwarg`]) equals any of values'''
     if all(isinstance(a, (int, str, float, tuple)) for a in lst):
         raise TypeError(f'Expected a dict or object, got another')
-    elif all(isinstance(a, dict) for a in lst):
+    if all(isinstance(a, dict) for a in lst):
         return [a[output] if output != 'self' else a for a in lst if ((a[kwarg] in values) if kwarg != None else True)]
     elif all(isinstance(a, object) for a in lst):
         return [getattr(item, output) if output != 'self' else item for item in lst if ((getattr(item, kwarg) in values) if kwarg != None else True)]
+
+# def f_all(output, lst, kwarg=None, values:list=None): # This is basically Excel at this point
+#     result = []
+#     if isinstance(lst, (list, tuple)):
+#         for elem in lst:
+#             if (kwarg, values) != (None, None):
+#                 if all(attr in dir(elem) for attr in [kwarg, output]):
+#                     result += [elem.output] if elem.kwarg in values else []
+#                 elif isinstance(elem, dict) and (kwarg in elem.keys() and elem[kwarg] == values)
+
+
+
 
 def shuffle_lst(lst:list):
     x = randint_list(0,len(lst)-1)
@@ -239,22 +251,17 @@ def share_the_pot(pot, p_list:list) -> int:
         p.bankroll += pot // len(p_list)
 
 # Server stuff
-class s_connect:
-    '''special class consisting of functions used to send to/ask for input from players and for players to recieve and/or answer'''
-    def __init__(self, item) -> None:
-        return item
+class sync_conn:
+    '''Special class consisting of functions used to send to/ask for input from players and for players to recieve and/or answer'''
 
     def print(socks_or_players: list, msg: str):
         '''Send a message to all players from `players`'''
-        if msg != None:
-            if not isinstance(socks_or_players, list):
-                socks_or_players = [socks_or_players]
-            if not all(isinstance(item, socket.socket) for item in socks_or_players):
-                socks_or_players = [player.connect["Connection"] for player in socks_or_players]
-            for conn in socks_or_players:
-                conn.send('print'.encode())
-                conn.recv(2048)
-                conn.send(msg.encode())
+        for elem in socks_or_players:
+            if not isinstance(elem, socket.socket):
+                elem = elem.connect["Connection"]
+            elem.send('print'.encode())
+            elem.recv(1024)
+            elem.send(msg.encode())
 
     def input(__sock_or_player, msg: str):
         '''ask particular player for input, return it'''
@@ -275,35 +282,32 @@ class s_connect:
             sock.recv(1024)
             sock.send(msg.encode())
 
-    def receive(sock:socket.socket):
-        flag = sock.recv(1024).decode()
-        sock.send('received'.encode())
+    def receive(sock:socket.socket, marker=None):
+        if marker == None:
+            marker = sock.recv(1024).decode()
+            sock.send('received'.encode())
         data = sock.recv(1024).decode()
-        if flag == 'print':
+        if marker in ['print', 'close']:
             print(data)
-        if flag == 'input':
-            res = input(data).encode()
-            sock.send(res)
-        if flag == 'close':
-            print(data)
-            return True
-        return None # Returns False
+        elif marker == 'input':
+            sock.send(input(data).encode())
+        return marker == 'close'
 
 class PokerPlayer:
     current_bet = 0
-    flag_active: bool = True
-    flag_out: bool = False
-    flag_button: bool = False
-    did_move: bool = False
+    flag_active:bool = True
+    flag_out:bool = False
+    flag_dealer:bool = False
+    did_move:bool = False
 
-    def __init__(self, name: str, place: int = -1, connect = {}, bankroll: int = 1000) -> None:
+    def __init__(self, name:str, place:int=-1, connect={}, bankroll:int=1000) -> None:
         self.name = name
         self.cards:list[tuple] = []
         self.place = place
         self.connect = connect
         self.bankroll = bankroll
 
-    def bet(self, bet, blind: str = None):
+    def bet(self, bet, blind:str=None):
         self.current_bet = min(self.bankroll, bet)
         if self.current_bet == self.bankroll:
             return f'\n{self.name} goes all-in ({self.current_bet}$)!'
@@ -330,10 +334,10 @@ class PokerPlayer:
             add_to(msg, options, '[F]old', '[Q]uit')
 
             #Ask for a move
-            name = s_connect.input(self, f'\n{self.name}, Your move;\n{end_join(msg,", "," or ")}\n> ').upper()
+            name = sync_conn.input(self, f'\n{self.name}, Your move;\n{end_join(msg,", "," or ")}\n> ').upper()
             while name not in options:
-                s_connect.print(self, '\nIncorrect move! Please, try again:')
-                name = s_connect.input(self, f'\n{self.name}, Your move;\n{end_join(msg,", "," or ")}\n> ').upper()
+                sync_conn.print(self, '\nIncorrect move! Please, try again:')
+                name = sync_conn.input(self, f'\n{self.name}, Your move;\n{end_join(msg,", "," or ")}\n> ').upper()
 
             # The move itself
             if name == 'C':
@@ -354,12 +358,13 @@ class PokerPlayer:
 
             elif name == 'A':
                 return self.bet(self.bankroll)
+
             elif name in 'BR':
                 minimum = max(bet, small_blind*4) if name == 'R' else small_blind*2
-                new_bet = s_connect.input(self, f'Enter a bet ({minimum} to {self.bankroll}${(" or [A]ll-in" if name == "B" else "")}):\n> ').capitalize()
+                new_bet = sync_conn.input(self, f'Enter a bet ({minimum} to {self.bankroll}$ or [A]ll-in):\n> ').capitalize()
                 while new_bet not in (['A'] if name in 'B' else []) + [str(a) for a in range(minimum, self.bankroll + 1)]:
-                    s_connect.print(self, 'Incorrect input.\n')
-                    new_bet = s_connect.input(self, f'Enter a bet ({minimum} to {self.bankroll}${(" or [A]ll-in" if name == "B" else "")}:\n> ').capitalize()
+                    sync_conn.print(self, 'Incorrect input.\n')
+                    new_bet = sync_conn.input(self, f'Enter a bet ({minimum} to {self.bankroll}$ or [A]ll-in):\n> ').capitalize()
                 if new_bet.upper() == 'A':
                     return self.bet(self.bankroll)
                 return self.bet(int(new_bet))
@@ -383,14 +388,14 @@ class PokerTable:
             indexes = []
             combs = []
             def ask(player:PokerPlayer):
-                s_connect.print(self.viewers, f'\n{player.name}\'s move')
-                if s_connect.input(player, f'{player.name}, would You like to show your cards (Y/N)?\n').upper() == 'Y':
-                    s_connect.print(self.viewers, f'\n{player.name}\'s cards are {fancy_cards(player.cards)}')
-                    s_connect.print(self.viewers, f'The best hand: {poker_combination(player.cards, table, game_type)["Hand"]}')
+                sync_conn.print(self.viewers, f'\n{player.name}\'s move')
+                if sync_conn.input(player, f'{player.name}, would You like to show your cards (Y/N)?\n').upper() == 'Y':
+                    sync_conn.print(self.viewers, f'\n{player.name}\'s cards are {fancy_cards(player.cards)}')
+                    sync_conn.print(self.viewers, f'The best hand: {poker_combination(player.cards, table, game_type)["Hand"]}')
                     indexes.append(self.active_players.index(player))
                     combs.append(poker_combination(player.cards, table, game_type))
                 else:
-                    s_connect.print(self.viewers, f'{player.name} passes his cards')
+                    sync_conn.print(self.viewers, f'{player.name} passes his cards')
             for p in self.active_players[:-1]:
                 ask(p)
             if len(indexes) == 0:
@@ -405,7 +410,7 @@ class PokerTable:
             return all((p.current_bet == bet or p.current_bet == p.bankroll or not p.flag_active) and (p.did_move) for p in self.active_players)
 
         # preparations
-        button_place = f_all('place', self.players, 'flag_button', True)[0]
+        dealer_place = f_all('place', self.players, 'flag_dealer', True)[0]
         game_coeff = ["T", "O"].index(game_type)
 
         # initial state
@@ -423,25 +428,25 @@ class PokerTable:
         while session_state <= 3 and len([p for p in self.active_players if p.flag_active and p.bankroll]) > 1 and len(self.active_players) > 1:
             # counter = 0
             visible_table_cards = table_cards[0:(lambda x: int(2*bool(x) + x))(session_state)]
-            s_connect.print(self.viewers, '= '*25)
-            s_connect.print(self.viewers, f'Players: {" - ".join([p.name + f"[{str(p.bankroll)}$]" + "[D]"*p.flag_button + "[X]"*(not p.flag_active) for p in self.players])}')
-            s_connect.print(self.viewers, f'Current pot: {self.current_pot}$')
-            s_connect.print(self.viewers, f'\nTable: {fancy_cards(visible_table_cards)}')
+            sync_conn.print(self.viewers, '= '*25)
+            sync_conn.print(self.viewers, f'Players: {" - ".join([p.name + f"[{str(p.bankroll)}$]" + "[D]"*p.flag_dealer + "[X]"*(not p.flag_active) for p in self.players])}')
+            sync_conn.print(self.viewers, f'Current pot: {self.current_pot}$')
+            sync_conn.print(self.viewers, f'\nTable: {fancy_cards(visible_table_cards)}')
             for player in self.active_players:
-                s_connect.print(player, f'Your cards: {fancy_cards(player.cards)}')
-                s_connect.print(player, f'Strongest hand: {best_current_hand(player)["Hand"]}')
+                sync_conn.print(player, f'Your cards: {fancy_cards(player.cards)}')
+                sync_conn.print(player, f'Strongest hand: {best_current_hand(player)["Hand"]}')
             bet = 0
             if session_state == 0:
-                s_connect.print(self.viewers, self.players[(button_place + 1) % len(self.players)].bet(small_blind, 'small'))
-                s_connect.print(self.viewers, self.players[(button_place + 2) % len(self.players)].bet(small_blind*2, 'big'))
+                sync_conn.print(self.viewers, self.players[(dealer_place + 1) % len(self.players)].bet(small_blind, 'small'))
+                sync_conn.print(self.viewers, self.players[(dealer_place + 2) % len(self.players)].bet(small_blind*2, 'big'))
                 bet = max(f_all('current_bet', self.players))
-                counter = (button_place + 3) % len(self.players)
+                counter = (dealer_place + 3) % len(self.players)
 
             while (counter < len(self.players) or not check_the_bets(bet)) and len(self.active_players) > 1:
                 current_player = self.players[counter % len(self.players)]
                 if current_player.bankroll and current_player.flag_active:
-                    s_connect.print([p for p in self.viewers if p != current_player], f'\nIt\'s {current_player.name}\'s move')
-                s_connect.print(self.viewers, self.players[counter % len(self.players)].action(bet, small_blind))
+                    sync_conn.print([p for p in self.viewers if p != current_player], f'\nIt\'s {current_player.name}\'s move')
+                sync_conn.print(self.viewers, self.players[counter % len(self.players)].action(bet, small_blind))
                 bet = max(f_all('current_bet', self.players))
                 self.active_players = list(filter(lambda p: p.flag_active and not p.flag_out, self.players))
                 if len(self.active_players) == 1:
@@ -459,10 +464,10 @@ class PokerTable:
         # showdown
         visible_table_cards = table_cards
         if len(self.active_players) > 1:
-            s_connect.print(self.viewers, f'\nTable: {fancy_cards(table_cards)}')
+            sync_conn.print(self.viewers, f'\nTable: {fancy_cards(table_cards)}')
             indexes, hands = showdown(table_cards)
             if len(hands) == 1:
-                s_connect.print(self.viewers, f'\nPlayer {self.active_players[indexes[0]].name} wins!')
+                sync_conn.print(self.viewers, f'\nPlayer {self.active_players[indexes[0]].name} wins!')
                 share_the_pot(self.current_pot, [self.active_players[indexes[0]]])
             else:
                 winner_hand = compare_combinations(hands)
@@ -470,38 +475,37 @@ class PokerTable:
                 if len(winners) > 1:
                     winner_names = [nam[0].name for nam in winners if nam[1]]
                     if len(winner_names) > 1:
-                        s_connect.print(self.viewers, f'\nA tie! {end_join(winner_names,", "," and ")} share the pot equally, as they have the same highest combination:\n{winner_hand["Hand"]}')
+                        sync_conn.print(self.viewers, f'\nA tie! {end_join(winner_names,", "," and ")} share the pot equally, as they have the same highest combination:\n{winner_hand["Hand"]}')
                     else:
-                        s_connect.print(self.viewers, f'\nPlayer {winner_names[0]} wins the round,\nhis hand had the highest kicker: {", ".join([str(ORDER[x]) for x in winner_hand["Kicker"]])}')
+                        sync_conn.print(self.viewers, f'\nPlayer {winner_names[0]} wins the round,\nhis hand had the highest kicker: {", ".join([str(ORDER[x]) for x in winner_hand["Kicker"]])}')
                 else:
-                    s_connect.print(self.viewers, f'\nPlayer {winners[0][0].name} wins with the strongest combination:\n{best_current_hand(winners[0][0])["Hand"]}')
+                    sync_conn.print(self.viewers, f'\nPlayer {winners[0][0].name} wins with the strongest combination:\n{best_current_hand(winners[0][0])["Hand"]}')
                 share_the_pot(self.current_pot, [a[0] for a in winners if a[1]])
         else:
-            s_connect.print(self.viewers, f'\nPlayer {self.active_players[0].name} wins!')
+            sync_conn.print(self.viewers, f'\nPlayer {self.active_players[0].name} wins!')
             share_the_pot(self.current_pot, self.active_players)
         self.current_pot = 0
 
-        [p for p in self.players if p.flag_button][0].flag_button = False
+        [p for p in self.players if p.flag_dealer][0].flag_dealer = False
         self.players = list(filter(lambda a: a.bankroll > 0 and not a.flag_out, self.players))
-        ([p for p in self.players if p.place > button_place]+[self.players[0]])[0].flag_button = True
+        ([p for p in self.players if p.place > dealer_place]+[self.players[0]])[0].flag_dealer = True
         # The end
 
     def game_of_poker(self, game_type = "T"):
-        print('Game starts')
-        self.default_state()
-        self.players = self.viewers
+        self.viewers = self.players
         __small_blind = 10
         rounds = 0
-        self.players[0].flag_button = True
+        self.players[0].flag_dealer = True
+        print('Game starts')
         while len(self.players) > 1:
             small_blind = __small_blind << (rounds // 4)
             self.party(small_blind, game_type)
             rounds += 1
-        s_connect.print(self.viewers, f"\nGame is finished, winner - {self.players[0].name}")
-        s_connect.print(self.viewers, 'Waiting for host to restart or leave...')
+        sync_conn.print(self.viewers, f"\nGame is finished, winner - {self.players[0].name}")
+        sync_conn.print(self.viewers, 'Waiting for host to restart or leave...')
         print('Game has ended\n')
+        self.players = self.viewers
+        self.default_state()
 
-# if __name__ == "__main__":
-#     print(__omaha_combination([(7, CLUB), ('A', CLUB), (7, CLUB), (7, CLUB)], [(9, DIAMOND), (8, DIAMOND), ('A', DIAMOND), ('A', CLUB)]))
 
-__all__ = ['s_connect', 'DECK', 'PokerPlayer', 'PokerTable', 'fancy_cards', 'f_all', 'ORDER', 'shuffle_lst', 'end_join']
+__all__ = ['sync_conn', 'DECK', 'PokerPlayer', 'PokerTable', 'fancy_cards', 'f_all', 'ORDER', 'shuffle_lst', 'end_join', 'SUITS']
