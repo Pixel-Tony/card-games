@@ -18,6 +18,10 @@ game_parameters = {
     'Player count' : None # 2 - 8
 }
 
+class UsedNameError(Exception):
+    def __init__(self):
+        super().__init__('Name is already in use')
+
 class Window:
     class sheet:
         def __init__(self, *items:tk.Widget) -> None:
@@ -184,40 +188,47 @@ __awaiting_players_screen.sheet_add('omaha', button_bool_omaha, text_omaha)
 
 def game_start_button_action():
     __awaiting_players_screen.show(0, 'omaha')
-    async def connect_player(sock:socket.socket, loop:asyncio.AbstractEventLoop):
-        conn, addr = await loop.sock_accept(sock)
-        # p_name = conn.recv(1024).decode().capitalize()
-        # while p_name in client_connections.keys():
-        #     conn.send('failure'.encode())
-        #     p_name = conn.recv(1024).decode().capitalize()
-        # client_connections[p_name] = {'connection' : conn, 'address' : addr}
-        # button_join.configure(state='normal')
+    interrupted = 0
+
+    def _():
+        nonlocal interrupted
+        __awaiting_players_screen.win.update()
+        __awaiting_players_screen.win.update_idletasks()
+        # while interrupted < game_parameters['Player count'] - 1:
+        try:
+            conn, addr = sock.accept()
+            p_name = conn.recv(4096).decode()
+            if p_name.lower() in map(lambda a: a.lower(), client_connections):
+                raise UsedNameError
+        except TimeoutError:
+            pass
+        except UsedNameError:
+            conn.send('0'.encode())
+            conn.close()
+        # except RuntimeError as e:
+        #     print(e)
+        else:
+            client_connections[p_name] = {'connection' : conn, 'address' : addr}
+            interrupted += 1
+
 
     game_parameters.update({'Player count' : players_counter.get()})
     button_join.configure(state='disabled')
 
 
-    client_connections = dict()
+
+
+
+    client_connections:dict[str, dict[socket.socket, socket._RetAddress]] = dict()
     sock = socket.socket()
     sock.bind(('', 50240))
     sock.listen(game_parameters['Player count'])
-    # sock.setblocking(False)
+    sock.settimeout(0.001)
 
-    for i in range(game_parameters['Player count'] - 1):
-        client_connections += sock.accept()[1]
-    print(client_connections)
+    while interrupted < game_parameters['Player count'] - 1:
+        _()
+    button_join.configure(state='normal')
 
-    # async def _main(sock, loop, client_connections):
-    #     tasks = []
-    #     for i in range(game_parameters['Player count'] - 1):
-    #         client_connections += await connect_player(sock, loop)
-    #     #     tasks.append(asyncio.create_task(connect_player(sock, loop)))
-    #     # for task in tasks:
-    #     #     await task
-
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(_main(sock, loop, client_connections))
-    # loop.close()
 
 
 def button_join_game_action():
@@ -234,10 +245,6 @@ def button_join_game_action():
     __awaiting_players_screen.show(1)
 
 
-
-
-
-
     pass
 
 
@@ -251,6 +258,7 @@ game_start_button.configure(command=game_start_button_action)
 
 
 start_menu.show(0)
-
+# start_menu.mainloop()
+# __awaiting_players_screen.mainloop()
 root.mainloop()
 
