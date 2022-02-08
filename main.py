@@ -136,21 +136,29 @@ lst_20_players_nicknames = [
     tk.Label(game_screen.win, text='', font=Params.font_players, anchor='w',
     bg=Params.color_dark_blue, fg=Params.color_gold) for i in range(8)]
 
-# button_20_pass = tk.Button(game_screen.win, cnf_menu_button, text='')
-# button_20_check = tk.Button(game_screen.win, cnf_menu_button, text='')
-# button_20_fold = tk.Button(game_screen.win, cnf_menu_button, text='')
-# button_20_quit = tk.Button(game_screen.win, cnf_menu_button, text='')
-# button_20_call = tk.Button(game_screen.win, cnf_menu_button, text='')
-# button_20_bet = tk.Button(game_screen.win, cnf_menu_button, text='')
-# button_20_raise = tk.Button(game_screen.win, cnf_menu_button, text='')
 
-# button_20_pass.grid(cnf_game_button_g, row=7, column=25, columnspan=9)
-# button_20_check.grid(cnf_game_button_g, row=71, column=35, columnspan=9)
-# button_20_fold.grid(cnf_game_button_g, row=71, column=45, columnspan=9)
-# button_20_quit.grid(cnf_game_button_g, row=71, column=55, columnspan=9)
-# button_20_call.grid(cnf_game_button_g, row=71, column=65, columnspan=9)
-# button_20_bet.grid(cnf_game_button_g, row=71, column=75, columnspan=9)
-# button_20_raise.grid(cnf_game_button_g, row=71, column=85, columnspan=9)
+button_20_check = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Check')
+button_20_call = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Call')
+button_20_show = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Show')
+
+button_20_bet = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Bet')
+button_20_raise = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Raise')
+
+button_20_fold = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Fold')
+button_20_muck = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Muck')
+
+button_20_quit = tk.Button(game_screen.win, CNF_MENU_BUTTON, text='Quit')
+
+for button in [button_20_check, button_20_call, button_20_show]:
+    button.grid(CNF_GAME_BUTTON_G) #DO
+
+for button in [button_20_bet, button_20_raise]:
+    button.grid(CNF_GAME_BUTTON_G) #DO
+
+for button in [button_20_fold, button_20_muck]:
+    button.grid(CNF_GAME_BUTTON_G) #DO
+
+button_20_quit.grid(CNF_GAME_BUTTON_G) #DO
 
 #TODO: seats
 
@@ -384,7 +392,13 @@ def poker_session(connections: dict[socket.socket, str], sock: socket.socket, ho
 
     switch_windows(start_menu, game_screen, 0)
 
+
     [Card(game_screen, (ORDER[8 + i], DIAMOND), small=True).grid(row=33, column=33 + 9*i) for i in range(5)]
+
+
+
+
+
     # card positions ^^^^^
 
     #TODO:

@@ -116,6 +116,7 @@ def holdem_combination(cards: list['Card']) -> PokerCombination:
         while i < stop:
             yield ORDER[i]
             i += 1
+
     cards = sorted(cards, key=lambda card: ORDER.index(card[0]), reverse=True)
     nominals : list; suits: list
     nominals, suits = zip(*cards)
@@ -239,9 +240,14 @@ class WImage:
 
 class Window:
     instances: list['Window'] = []
-    class _sheet:
-        def __init__(self, *items:tk.Widget) -> None:
+    class sheet:
+        def __init__(self, *items: tk.Widget) -> None:
             self.collection: list[tk.Widget] = reduce(lambda res, a: res + [a] if not isinstance(a, list) else res + a, items, [])
+            self.hide()
+
+        def add(self, *items):
+            self.collection: list[tk.Widget] = reduce(lambda res, a: res + [a] if not isinstance(a, list) else res + a, items, self.collection)
+            self.hide()
 
         def hide(self): [elem.grid_remove() for elem in self.collection]
         def show(self): [elem.grid() for elem in self.collection]
@@ -249,7 +255,7 @@ class Window:
         def enable(self): [elem.configure(state='normal') for elem in self.collection]
 
     def __init__(self, name: str, title: str, master: 'Window' = ..., bg: str = None) -> None:
-        Sheet = self._sheet
+        Sheet = self.sheet
         self._sheets: dict[Union[int, str], Sheet] = dict()
         self._size = DIMS[name]
         self.win = tk.Tk() if master == ... else tk.Toplevel(master.win)
@@ -271,11 +277,8 @@ class Window:
         Window.instances += [self]
 
     def add_sheet(self, id:Union[int, str], *items):
-        self._sheets[id] = self._sheet(*items)
+        self._sheets[id] = self.sheet(*items)
         self._sheets[id].hide()
-
-    def add_to_sheet(self, sheet, *items):
-        self._sheets[sheet].collection.extend(items)
 
     def show_sheet(self, id):
         for sh in self._sheets:
@@ -302,16 +305,9 @@ class Window:
         row = lambda e: (e.y + (e.widget.winfo_y() if e.widget != self.win else 0))
         self.win.bind('<Button-3>', lambda e: print(f'x (column) - {column(e)}, y (row) - {row(e)}'))
 
-    @classmethod
-    def update_all(cls): [window.win.update() for window in cls.instances]
 
 def switch_windows(from_: Window, to: Window, which: int):
     from_.hide() or to.show(which)
-
-class Sprite:
-    def __init__(self) -> None:
-        pass
-
 
 class Card:
     def __init__(self, master: 'Window', card_value: tuple[Union[int, str], str], shirt_up: bool = False, small: bool = False) -> None:
@@ -331,7 +327,7 @@ class Card:
         return [self.rank, self.suit][val]
 
 class TableSeat:
-    coords = { #pixel positions of all player "equipment" - chips, cards and real cards positions for showing
+    coords = { #pixel positions of all player "equipment" - chips, cards and real cards positions for showing #TODO: card positions (after seat graphics)
         0 : {'table': (216, 306), 'cards': (0, 0), 'chips': ((27, 28), (26, 28), (25, 29)), 'seat': (0, 0)}, # blue, green, red ("rgb backwards")
         1 : {'table': (436, 264), 'cards': (0, 0), 'chips': ((51, 28), (51, 27), (50, 27)), 'seat': (0, 0)},
         2 : {'table': (616, 264), 'cards': (0, 0), 'chips': ((70, 27), (69, 27), (68, 27)), 'seat': (0, 0)},
@@ -366,6 +362,14 @@ class TableSeat:
     def show_player_cards(self): '''show REAL cards'''
 
 class NetworkInterface:
+    '''
+    Commands:
+
+
+
+
+
+    '''
     pass #TODO:
 
 
@@ -376,7 +380,7 @@ class PokerEvent:
         """
         Class for transmitting actions
         `player`: poker player, who's action it is
-        `action`: PASS, CHECK, FOLD, QUIT, CALL, BET, RAISE, TIMEOUT or DISCONNECT
+        `action`: MUCK, CHECK, FOLD, QUIT, CALL, BET, RAISE, TIMEOUT or DISCONNECT
         (BET and RAISE go with an `arg` of sum $)
         """
         self.player = player
@@ -439,8 +443,8 @@ class PokerPlayer:
 
 
 
-    def bet(self, bet: int, sb=False, bb=False): #DO
-        pass
+    def bet(self, bet: int, sb=False, bb=False):
+        pass#TODO:
 
 
 
@@ -475,12 +479,12 @@ class PokerTable:
         def ask(player: PokerPlayer, table_cards: tuple[Card]) -> Union[PokerPlayer, None]:
             comb = poker_combination(player.cards, table_cards, game_type)
             #DO display who's move it is
-            # send a request to show their cards or pass
+            # send a request to show their cards or muck
             if 'yes':
                 ... #DO show their cards and comb to everybody
                 return player, comb
             else:
-                ... #DO player passes cards
+                ... #DO player mucks cards
 
         sits = len(self.players)
         game_type = (game_type == 'Omaha')
@@ -549,7 +553,7 @@ class PokerTable:
         return
 
 
-class PokerTabl2e:
+class _PokerTable:
     def party(self, small_blind, game_type, table_cards, best_current_hand, dealer_place, active_players):
         if len(self.active_players) > 1:
 
@@ -577,5 +581,5 @@ class PokerTabl2e:
             p.flag_dealer = False
         [p for p in self.players if p.flag_dealer][0].flag_dealer = False
         self.players = list(filter(lambda a: a.bankroll > 0 and not a.flag_out, self.players))
-        ([p for p in self.players if p.place > dealer_place]+[self.players[0]])[0].flag_dealer = True
+        ([p for p in self.players if p.place > dealer_place] + self.players)[0].flag_dealer = True
         # The end

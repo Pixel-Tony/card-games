@@ -63,9 +63,10 @@ CODE_NAME_EXISTS = GameCode(732, 'Name is already in use in this lobby')
 
 class PokerCombination:
     name: str
-    hand: list[int] = [0]
+    hand = [0]
     kicker: list[int] = None
-    def __eq__(self, __o: 'PokerCombination'): return self.hand == __o.hand and self.kicker == __o.kicker
+    def __eq__(self, __o: 'PokerCombination'):
+        return self.hand == __o.hand and self.kicker == __o.kicker
 
 class Params:
     color_white = '#fff'
@@ -85,7 +86,7 @@ CNF_MENU_BUTTON = {'font' : Params.font_head, 'bg' : 'DeepSkyBlue3', 'activeback
 CNF_LABEL = {'bg' : Params.color_BG, 'fg' : 'white'}
 CNF_LABEL_G = {'rowspan' : 4, 'sticky' : 'NEWS'}
 CNF_IMAGE_G = {'sticky' : 'NEWS'}
-CNF_GAME_BUTTON_G = {'rowspan' : 6, 'sticky' : 'NEWS'}
+CNF_GAME_BUTTON_G = {'rowspan' : 6, 'columnspan' : 9, 'sticky' : 'NEWS'}
 
 __all__ = [
     # constants
@@ -120,3 +121,5 @@ __all__ = [
     'PokerCombination',
     'Params',
 ]
+
+
