@@ -3,3 +3,6 @@ util/__pycache__/__init__.cpython-310.pyc
 util/__pycache__/fool_util.cpython-310.pyc
 util/__pycache__/poker_util.cpython-310.pyc
 util/ip_data.txt
+workspace.code-workspace
+.vscode/
+test.py
