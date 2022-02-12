@@ -4,6 +4,7 @@ from typing import Literal, Union
 from random import shuffle, choice
 import urllib.request, urllib.error
 import tkinter as tk
+import tkinter.font as tkf
 import os.path
 import socket
 import pickle
@@ -41,6 +42,7 @@ __all__ = [
     'tk',
 
     # functions
+    'smartify_entry',
     'reduce',
     'shuffle',
     'choice',
@@ -73,6 +75,8 @@ __all__ = [
     'PokerEvent',
     'PokerPlayer',
     'PokerTable',
+    'WindowSheet',
+    'ChatHandler',
 ]
 
 # # # # # # # # # # # # # # # # | SERVER | # # # # # # # # # # # # # # # #
@@ -85,16 +89,20 @@ def get_ip() -> str:
 
 @exception_proof_ish(True)
 def recvobj(sock_where: socket.socket):
-    '''Recieve an object from `sock_where`\n\n return `None` on success'''
+    '''Recieve an object from `sock_where`\n\n return None on success'''
     objlen = int(sock_where.recv(HEADLEN).decode())
     res = b''
     while len(res) < objlen:
         res += sock_where.recv(min(2048, objlen - len(res)))
+    # a = pickle.loads(res)
+    # print('got', a)
+    # return a
     return pickle.loads(res)
 
 @exception_proof_ish(True)
 def sendobj(sock_where: socket.socket, obj):
-    '''Send object `obj` to `sock_where`\n\nreturn `None` on success'''
+    '''Send object `obj` to `sock_where`\n\nreturn None on success'''
+    # print('sent', obj)
     obj = pickle.dumps(obj)
     obj = str(len(obj)).zfill(HEADLEN).encode() + obj
     return sock_where.sendall(obj)
@@ -238,34 +246,52 @@ class WImage:
         cls.cache.append(instance)
         return instance
 
+class WindowSheet:
+    def __init__(self, master: 'Window', grid_items: list[tk.Widget] = None, place_items: list[tk.Widget] = None) -> None:
+        self.grid_collection: list[tk.Widget] = []
+        self.place_collection: dict[tk.Widget, dict[str, ]] = {}
+        if grid_items:
+            self.add_grid(*grid_items)
+        if place_items:
+            self.add_place(*place_items)
+        master._sheets.append(self)
+
+    def add_grid(self, *items):
+        self.grid_collection += reduce(lambda res, a: res + [a] if not isinstance(a, list) else res + a, items, [])
+        self.hide()
+
+    def add_place(self, *items):
+        items_lst: list[tk.Widget] = reduce(lambda res, a: res + [] if not isinstance(a, list) else res + a, items, [])
+        self.place_collection = {**{a: a.place_info() for a in items_lst}, **self.place_collection}
+
+    def hide(self): [elem.grid_remove() for elem in self.grid_collection]
+    def show(self): [elem.grid() for elem in self.grid_collection]
+    def disable(self): [elem.configure(state='disabled') for elem in self.grid_collection]
+    def enable(self): [elem.configure(state='normal') for elem in self.grid_collection]
+
 class Window:
-    instances: list['Window'] = []
-    class sheet:
-        def __init__(self, *items: tk.Widget) -> None:
-            self.collection: list[tk.Widget] = reduce(lambda res, a: res + [a] if not isinstance(a, list) else res + a, items, [])
-            self.hide()
+    current_window = None
+    quit = 0
+    __ins: list["Window"] = []
 
-        def add(self, *items):
-            self.collection: list[tk.Widget] = reduce(lambda res, a: res + [a] if not isinstance(a, list) else res + a, items, self.collection)
-            self.hide()
-
-        def hide(self): [elem.grid_remove() for elem in self.collection]
-        def show(self): [elem.grid() for elem in self.collection]
-        def disable(self): [elem.configure(state='disabled') for elem in self.collection]
-        def enable(self): [elem.configure(state='normal') for elem in self.collection]
+    @classmethod
+    def quit_window(cls):
+        BoolTrigger.disable()
+        for w in Window.__ins:
+            w.win.destroy()
+        Window.quit = True
 
     def __init__(self, name: str, title: str, master: 'Window' = ..., bg: str = None) -> None:
-        Sheet = self.sheet
-        self._sheets: dict[Union[int, str], Sheet] = dict()
+        self._sheets: list[WindowSheet] = []
         self._size = DIMS[name]
         self.win = tk.Tk() if master == ... else tk.Toplevel(master.win)
-        self.win.protocol('WM_DELETE_WINDOW', lambda: BoolTrigger.disable() or self.win.quit())
+        self.win.protocol('WM_DELETE_WINDOW', Window.quit_window)
         self.win.resizable(0, 0)
         self.win.title(title)
         a, b = (self.win.winfo_screenwidth() - self._size[0]) // 2, (self.win.winfo_screenheight() - self._size[1]) // 2
         self._geometry = f'{self._size[0]}x{self._size[1]}+{a}+{b}'
         self.win.geometry(self._geometry)
-        self.current_sheet = 0
+        self.current_sheet = None
         if bg != None: self.win['bg'] = bg
         self._hidden: bool = False
 
@@ -274,40 +300,112 @@ class Window:
         for row in range(self._size[1] // 10):
             self.win.rowconfigure(row, weight=1, minsize=10)
         self.hide()
-        Window.instances += [self]
+        if master == ...:
+            Window.__ins.append(self)
 
-    def add_sheet(self, id:Union[int, str], *items):
-        self._sheets[id] = self.sheet(*items)
-        self._sheets[id].hide()
-
-    def show_sheet(self, id):
-        for sh in self._sheets:
-            self._sheets[sh].hide()
-        self._sheets[id].show()
+    def _show_sheet(self, sheet: WindowSheet):
+        [sh.hide() for sh in self._sheets if sh != sheet]
+        sheet.show()
 
     def hide(self):
         self.win.withdraw()
         self._hidden = True
 
-    def show(self, ind):
+    def show(self, sheet: WindowSheet):
         if self._hidden:
             self.win.geometry(self._geometry)
             self._hidden = not self._hidden
-        [self._sheets[sh].hide() for sh in self._sheets if sh != ind]
-        self._sheets[ind].show()
-        self.current_sheet = ind
+        self._show_sheet(sheet)
+        self.current_sheet = sheet
         self.win.deiconify()
+        self.win.focus_set()
+        __class__.current_window = self
 
     def mainloop(self): self.win.mainloop()
 
     def enable_debug(self):
         column = lambda e: (e.x + (e.widget.winfo_x() if e.widget != self.win else 0))
         row = lambda e: (e.y + (e.widget.winfo_y() if e.widget != self.win else 0))
-        self.win.bind('<Button-3>', lambda e: print(f'x (column) - {column(e)}, y (row) - {row(e)}'))
-
+        self.win.bind('<Button-3>', lambda e: print(f'x (column): {column(e)}, y (row): {row(e)}'))
 
 def switch_windows(from_: Window, to: Window, which: int):
-    from_.hide() or to.show(which)
+    from_.hide()
+    to.show(which)
+    Window.current_window = to
+
+def smartify_entry(entry: tk.Entry):
+    def copy(entry: tk.Entry):
+        if entry.select_present():
+            entry.clipboard_clear()
+            entry.clipboard_append(entry.selection_get())
+
+    def paste(entry: tk.Entry):
+        if entry.select_present():
+            start = entry.index(tk.SEL_FIRST)
+            end = entry.index(tk.SEL_LAST)
+        else:
+            start = entry.index(tk.INSERT)
+            end = entry.index(tk.INSERT)
+
+        entry.delete(start, end)
+
+        try:
+            entry.insert(start, entry.master.clipboard_get())
+        except tk.TclError:
+            entry.insert(start, '')
+
+    def cut(entry: tk.Entry):
+        if entry.select_present():
+            start = entry.index(tk.SEL_FIRST)
+            end = entry.index(tk.SEL_LAST)
+            entry.clipboard_append(entry.get()[start:end])
+            entry.delete(start, end)
+
+    def sel_all(entry: tk.Entry):
+        entry.select_range(0, tk.END)
+
+    keybinds = {
+        67: copy,
+        86: paste,
+        88: cut,
+        65: sel_all
+    }
+
+    def ctrl_keyhandler(ev: tk.Event):
+        if ev.keycode in keybinds:
+            keybinds[ev.keycode](ev.widget)
+
+    entry.bind(f'<Control-Key>', ctrl_keyhandler)
+    return entry
+
+class ChatHandler:
+    LETTER_HEIGHT = 20
+    XPAD, YPAD = 10, 10
+
+    def __init__(self, coords: tuple[int, int], canv: tk.Canvas, font) -> None:
+        self.canv = canv
+        self.x, self.y = coords
+        self.font = tkf.Font(self.canv, font)
+        self.max_line_len = int(canv['width']) - self.x - self.XPAD
+
+    def add_line(self, line: str):
+        words = line.split(' ')
+        lines = []
+        line = words[0]
+
+        for word in words[1:]:
+            if self.font.measure(line + ' ' + word) > self.max_line_len:
+                lines.append(line)
+                line = word
+            else:
+                line += ' ' + word
+        lines.append(line)
+
+        for line in lines:
+            self.canv.create_text(self.x, self.y, text=line, anchor='nw', font=self.font)
+            self.y += self.LETTER_HEIGHT + 5
+
+
 
 class Card:
     def __init__(self, master: 'Window', card_value: tuple[Union[int, str], str], shirt_up: bool = False, small: bool = False) -> None:
@@ -361,31 +459,52 @@ class TableSeat:
     def hide_cards(self):'''hide cards from the table'''
     def show_player_cards(self): '''show REAL cards'''
 
-class NetworkInterface:
-    '''
-    Commands:
-
-
-
-
-
-    '''
-    pass #TODO:
-
-
-
-
 class PokerEvent:
-    def __init__(self, player: 'PokerPlayer', body: str, arg=None) -> None:
-        """
-        Class for transmitting actions
-        `player`: poker player, who's action it is
-        `action`: MUCK, CHECK, FOLD, QUIT, CALL, BET, RAISE, TIMEOUT or DISCONNECT
-        (BET and RAISE go with an `arg` of sum $)
-        """
-        self.player = player
-        self.body = body
-        self.args = arg
+    # Codes: Player - 1, Server - 0
+    # Player - conn - action (+args)
+    # Player - conn - chat message
+    # Player - conn - disconnect
+    # Server - text message
+    # Server - game finished
+    # Server - game continues
+    # Actions:
+    codes = {
+        "Timeout"               : -2,
+        "Disconnect"            : -1,
+        "Act"                   : 0,
+            "Check"             : 1,
+            "Call"              : 2,                        # argument - sum
+            "Bet"               : 3,                        # argument - sum
+            "Raise"             : 4,
+            "Fold"              : 5,
+            "Quit"              : 6,
+            "Muck"              : 7,
+            "Show"              : 8,
+        "Chat message"          : 10
+    }
+
+    '''
+    print
+    input action
+    show cards
+    show pot
+    show strongest hand
+    show current bet
+    show/muck at showdown
+    clear table
+
+    '''
+
+    def __init__(self, code: int, *, from_server: bool = False, name: str = None, action: str, args: tuple = None):
+        self.code = code
+        self.from_server = from_server
+        self.who = name
+        self.action = action
+        self.args = args
+
+
+
+
 
 class PokerPlayer:
     def __init__(self, name: str, place: int, conn: socket.socket):
@@ -401,7 +520,7 @@ class PokerPlayer:
         self.bankroll = 1000
         self.cards = []
 
-    def action(self, bet=0, small_blind=10) -> PokerEvent:
+    def action(self, bet=0, small_blind=10):
         self.did_move = True
         options = []
         if bet <= self.current_bet:
@@ -448,6 +567,7 @@ class PokerPlayer:
 
 
 
+
 class PokerTable:
     def __init__(self, *players: PokerPlayer):
         self.players = players
@@ -457,6 +577,9 @@ class PokerTable:
         return [sendobj(player.conn, obj) for player in players]
 
     def set_default(self): [p.set_default() for p in self.players]
+
+
+
 
     def game(self, game_type):
         small_blind = 10

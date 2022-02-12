@@ -49,15 +49,15 @@ class BoolTrigger:
 
 class GameCode:
     def __init__(self, ind: int, message: str = None) -> None:
-        self.ind = ind
-        self.exception = message
+        self.ind, self.message = ind, message
 
     def __eq__(self, target: 'GameCode'): return isinstance(target, GameCode) and self.ind == target.ind
     def __len__(self): return 1 # for message length check in main
+    def __repr__(self): return f'<GameCode, code={self.ind}, message={self.message}>'
 
 CODE_SUCCESS = GameCode(700)
-CODE_DISCONNECT = GameCode(709)
-CODE_SHUT_CONN = GameCode(710, 'Connection closed by host')
+CODE_DISCONNECT = GameCode(712)
+CODE_SHUT_CONN = GameCode(711, 'Connection closed by host')
 CODE_SERVER_FULL = GameCode(731, 'Lobby is full')
 CODE_NAME_EXISTS = GameCode(732, 'Name is already in use in this lobby')
 
@@ -74,13 +74,14 @@ class Params:
     color_grey = '#aaa'
     color_warning = '#fe1'
     color_BG = '#484'
-    color_black = '#101010'
+    color_black = '#000922'
     color_dark_blue = '#002030'
     color_gold = '#ff3'
 
     font_head, font_middle, font_low = (('Century Gothic', str(p), 'bold') for p in [14, 12, 11])
     font_chat = 'Helvetica', '11'
     font_players = 'Helvetica', '12', 'bold'
+    font_super_low = 'Helvetica', '10', 'bold'
 
 CNF_MENU_BUTTON = {'font' : Params.font_head, 'bg' : 'DeepSkyBlue3', 'activebackground' : 'DeepSkyBlue2'}
 CNF_LABEL = {'bg' : Params.color_BG, 'fg' : 'white'}
