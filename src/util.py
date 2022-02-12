@@ -9,6 +9,7 @@ import os.path
 import socket
 import pickle
 import json
+import time as t
 from src.helpers import *
 
 __all__ = [
@@ -131,7 +132,7 @@ def holdem_combination(cards: list['Card']) -> PokerCombination:
     nominal_quantities = {elem : nominals.count(elem) for elem in set(nominals)}
     suit_quantities = {elem : suits.count(elem) for elem in set(suits)}
     result = PokerCombination()
-    if any(suit_quantities[x] >= 5 for x in suit_quantities): # 10 - 9 - 6 ## 'if any(n in suit_quantities.values() for n in [5, 6, 7]):' has the same exact length LMAO
+    if any(suit_quantities[x] >= 5 for x in suit_quantities): # 10 - 9 - 6
         main_suit = [suit for suit in suit_quantities if suit_quantities[suit] >= 5][0]
         filtered_cards, _ = zip(*[card for card in cards if card[1] == main_suit])
         for i in range(len(ORDER) - 5, -2, -1): # 10 - 9
@@ -459,53 +460,6 @@ class TableSeat:
     def hide_cards(self):'''hide cards from the table'''
     def show_player_cards(self): '''show REAL cards'''
 
-class PokerEvent:
-    # Codes: Player - 1, Server - 0
-    # Player - conn - action (+args)
-    # Player - conn - chat message
-    # Player - conn - disconnect
-    # Server - text message
-    # Server - game finished
-    # Server - game continues
-    # Actions:
-    codes = {
-        "Timeout"               : -2,
-        "Disconnect"            : -1,
-        "Act"                   : 0,
-            "Check"             : 1,
-            "Call"              : 2,                        # argument - sum
-            "Bet"               : 3,                        # argument - sum
-            "Raise"             : 4,
-            "Fold"              : 5,
-            "Quit"              : 6,
-            "Muck"              : 7,
-            "Show"              : 8,
-        "Chat message"          : 10
-    }
-
-    '''
-    print
-    input action
-    show cards
-    show pot
-    show strongest hand
-    show current bet
-    show/muck at showdown
-    clear table
-
-    '''
-
-    def __init__(self, code: int, *, from_server: bool = False, name: str = None, action: str, args: tuple = None):
-        self.code = code
-        self.from_server = from_server
-        self.who = name
-        self.action = action
-        self.args = args
-
-
-
-
-
 class PokerPlayer:
     def __init__(self, name: str, place: int, conn: socket.socket):
         self.name, self.conn = name, conn
@@ -706,3 +660,89 @@ class _PokerTable:
         self.players = list(filter(lambda a: a.bankroll > 0 and not a.flag_out, self.players))
         ([p for p in self.players if p.place > dealer_place] + self.players)[0].flag_dealer = True
         # The end
+
+class PokerEvent:
+    # Codes: Player - 1, Server - 0
+    # Player - conn - action (+args)
+    # Player - conn - chat message
+    # Player - conn - disconnect
+    # Server - text message
+    # Server - game finished
+    # Server - game continues
+    # Actions:
+    codes = {
+        "Timeout"               : -2,
+        "Disconnect"            : -1,
+        "Act"                   : 0,
+            "Check"             : 1,
+            "Call"              : 2,                        # argument - sum
+            "Bet"               : 3,                        # argument - sum
+            "Raise"             : 4,
+            "Fold"              : 5,
+            "Quit"              : 6,
+            "Muck"              : 7,
+            "Show"              : 8,
+        "Chat message"          : 10
+    }
+
+    '''
+    print
+    input action
+    show cards
+    show pot
+    show strongest hand
+    show current bet
+    show/muck at showdown
+    clear table
+
+    '''
+
+    def __init__(self, code: int, *, from_server: bool = False, name: str = None, action: str, args: tuple = None):
+        self.code = code
+        self.from_server = from_server
+        self.who = name
+        self.action = action
+        self.args = args
+
+class MyPrimitiveEventQueue:
+    class Lock:
+        def __init__(self):
+            self.lock = False
+
+        def __enter__(self):
+            while self.lock:
+                continue
+            self.lock = True
+
+        def __exit__(self, *err_args):
+            self.lock = False
+
+    def __init__(self, dt = 1/350) -> None:
+        self.dt = dt
+        self.lock = self.Lock()
+        self.queue = []
+
+    def __lock_control(func):
+        def _(self: 'MyPrimitiveEventQueue', *args):
+            t.sleep(self.dt)
+            with self.lock:
+                return func(self, *args)
+        return _
+
+    @__lock_control
+    def push(self, value, tag):
+        self.queue.append((tag, value))
+
+    @__lock_control
+    def get(self, tag=None):
+        '''Return None if no value with tag was found'''
+
+        if not len(self.queue):
+            return
+        if tag == None:
+            return self.queue.pop(0)
+
+        for i, elem in enumerate(self.queue):
+            if elem[0] == tag:
+                return self.queue.pop(i)[1]
+
