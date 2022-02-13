@@ -3,65 +3,65 @@ import threading as thr
 import select
 
 ##### First window - main menu
-win_start_menu = Window('menu', TITLE, bg=Params.color_BG)
-icon_pic = tk.PhotoImage(master=win_start_menu.win, file=DIR+r'\gfx\misc\logo.png')
-win_start_menu.win.iconphoto(True, icon_pic)
+win_menu = Window('menu', TITLE, bg=Params.color_BG)
+icon_pic = tk.PhotoImage(master=win_menu.win, file=DIR+r'\gfx\misc\logo.png')
+win_menu.win.iconphoto(True, icon_pic)
 
-win_start_menu.enable_debug()
+win_menu.enable_debug()
 
     # Adding the stuff that will be always visible
-label_00_heading = tk.Label(win_start_menu.win, text='Card Games Catalogue'.upper(), font=Params.font_head, fg='yellow', bg=Params.color_BG)
+label_00_heading = tk.Label(win_menu.win, text='Card Games Catalogue'.upper(), font=Params.font_head, fg='yellow', bg=Params.color_BG)
 label_00_heading.grid(row=1, column=1, rowspan=4, columnspan=48, sticky='WE')
 
     # Sheet 0 - main menu
-button_00_menu_host_game = tk.Button(win_start_menu.win, CNF_MENU_BUTTON,
-    text='Host game', command=lambda: win_start_menu.show(sheet_game_choice))
-button_00_menu_join_game = tk.Button(win_start_menu.win, CNF_MENU_BUTTON,
+button_00_menu_host_game = tk.Button(win_menu.win, CNF_MENU_BUTTON,
+    text='Host game', command=lambda: win_menu.show(sheet_game_choice))
+button_00_menu_join_game = tk.Button(win_menu.win, CNF_MENU_BUTTON,
     text='Join game', command=lambda: join_game())
-button_00_nickname = tk.Button(win_start_menu.win, CNF_MENU_BUTTON,
+button_00_nickname = tk.Button(win_menu.win, CNF_MENU_BUTTON,
     text='Change name', command=lambda: change_nickname())
-button_00_quit = tk.Button(win_start_menu.win, CNF_MENU_BUTTON,
-    text='Quit', command=win_start_menu.win.quit)
+button_00_quit = tk.Button(win_menu.win, CNF_MENU_BUTTON,
+    text='Quit', command=win_menu.win.quit)
 
 button_00_menu_host_game.grid(CNF_LABEL_G, row=10, column=13, columnspan=24)
 button_00_menu_join_game.grid(CNF_LABEL_G, row=15, column=13, columnspan=24)
 button_00_nickname.grid(CNF_LABEL_G, row=20, column=13, columnspan=24)
 button_00_quit.grid(CNF_LABEL_G, row=25, column=13, columnspan=24)
 
-sheet_main_menu = WindowSheet(win_start_menu,
+sheet_main_menu = WindowSheet(win_menu,
     grid_items=[button_00_menu_host_game, button_00_menu_join_game, button_00_quit, button_00_nickname])
 
     # Sheet 1 - game choose
-button_01_poker = tk.Button(win_start_menu.win, CNF_MENU_BUTTON,
+button_01_poker = tk.Button(win_menu.win, CNF_MENU_BUTTON,
     text='Poker', command=lambda: host_game('Poker'))
-button_01_durak = tk.Button(win_start_menu.win, CNF_MENU_BUTTON,
+button_01_durak = tk.Button(win_menu.win, CNF_MENU_BUTTON,
     text='Durak', command=lambda: host_game('Durak'))
-button_01_back = tk.Button(win_start_menu.win, CNF_MENU_BUTTON,
-    text='Back', command=lambda: win_start_menu.show(sheet_main_menu))
+button_01_back = tk.Button(win_menu.win, CNF_MENU_BUTTON,
+    text='Back', command=lambda: win_menu.show(sheet_main_menu))
 
 button_01_poker.grid(CNF_LABEL_G, row=10, column=18, columnspan=14)
 button_01_durak.grid(CNF_LABEL_G, row=15, column=18, columnspan=14)
 button_01_back.grid(CNF_LABEL_G, row=25, column=18, columnspan=14)
 
-sheet_game_choice = WindowSheet(win_start_menu,
+sheet_game_choice = WindowSheet(win_menu,
     grid_items=[button_01_poker, button_01_durak, button_01_back])
 
     # Sheet 2 - lobby (host)
-label_02_lobby = tk.Label(win_start_menu.win, text='LOBBY', font=Params.font_head, fg='yellow', bg=Params.color_BG)
-label_02_players = tk.Label(win_start_menu.win, CNF_LABEL, text='Players:', font=Params.font_head, anchor='w')
+label_02_lobby = tk.Label(win_menu.win, text='LOBBY', font=Params.font_head, fg='yellow', bg=Params.color_BG)
+label_02_players = tk.Label(win_menu.win, CNF_LABEL, text='Players:', font=Params.font_head, anchor='w')
 
-button_02_start = tk.Button(win_start_menu.win, CNF_MENU_BUTTON, text='Start')
-button_02_close = tk.Button(win_start_menu.win, CNF_MENU_BUTTON, text='Close')
-button_02_omaha = tk.Button(win_start_menu.win, fg='black', bg='#e33', activebackground='#ee3',
-    command=lambda: button_02_omaha.configure(bg=['#e33', '#3e3'][button_02_omaha['bg'] == '#e33'])) # why to change variables when you can change colors
+button_02_start = tk.Button(win_menu.win, CNF_MENU_BUTTON, text='Start')
+button_02_close = tk.Button(win_menu.win, CNF_MENU_BUTTON, text='Close')
+button_02_omaha = tk.Button(win_menu.win, fg='black', bg='#e33', activebackground='#ee3',
+    command=lambda: button_02_omaha.configure(bg=['#e33', '#3e3'][button_02_omaha['bg'] == '#e33'])) # why to change variables when you can change button colors
 
-text_02_omaha = tk.Label(win_start_menu.win, CNF_LABEL, text='Omaha version', font=Params.font_middle)
-text_02_server = tk.Label(win_start_menu.win, CNF_LABEL, text=f'Your IP-address is {IP}', font=Params.font_middle, anchor='w')
-button_02_copy = tk.Button(win_start_menu.win, image = WImage(win_start_menu, DIR + r'\gfx/misc/copy.png'),
-    command=lambda: win_start_menu.win.clipboard_clear() or win_start_menu.win.clipboard_append(IP))
+text_02_omaha = tk.Label(win_menu.win, CNF_LABEL, text='Omaha version', font=Params.font_middle)
+text_02_server = tk.Label(win_menu.win, CNF_LABEL, text=f'Your IP-address is {IP}', font=Params.font_middle, anchor='w')
+button_02_copy = tk.Button(win_menu.win, image = WImage(win_menu, DIR + r'\gfx/misc/copy.png'),
+    command=lambda: win_menu.win.clipboard_clear() or win_menu.win.clipboard_append(IP))
 
 def _names(i):
-    temp = tk.Label(win_start_menu.win, bg=['#3ed647', '#3cba45'][i % 2], anchor='w', font=Params.font_head, relief='raised', padx=7)
+    temp = tk.Label(win_menu.win, bg=['#3ed647', '#3cba45'][i % 2], anchor='w', font=Params.font_head, relief='raised', padx=7)
     temp.grid(CNF_LABEL_G, row=13 + 4*i, column=1, columnspan=24)
     return temp
 
@@ -76,55 +76,55 @@ button_02_omaha.grid(CNF_LABEL_G, row=46, column=1, columnspan=4)
 button_02_start.grid(CNF_LABEL_G, row=13, column=38, columnspan=10)
 button_02_close.grid(CNF_LABEL_G, row=18, column=38, columnspan=10)
 
-sheet_lobby_host = WindowSheet(win_start_menu,
+sheet_lobby_host = WindowSheet(win_menu,
     grid_items=[label_02_lobby, label_02_players, lst_02_players,
     button_02_start, button_02_close, text_02_omaha,
     button_02_omaha, text_02_server, button_02_copy])
 
     # Sheet 3 - lobby (player)
-button_03_leave = tk.Button(win_start_menu.win, CNF_MENU_BUTTON, text='Leave')
+button_03_leave = tk.Button(win_menu.win, CNF_MENU_BUTTON, text='Leave')
 button_03_leave.grid(CNF_LABEL_G, row=13, column=38, columnspan=10)
 
-sheet_lobby_player = WindowSheet(win_start_menu,
+sheet_lobby_player = WindowSheet(win_menu,
     grid_items=[lst_02_players, button_03_leave, label_02_lobby, label_02_players])
 
 ##### Second window - player nickname choose
-win_middle_screen = Window('middle', TITLE, win_start_menu, Params.color_BG)
+win_middle = Window('middle', TITLE, win_menu, Params.color_BG)
 
     # Adding the stuff that will be always visible
-label_1_message = tk.Label(win_middle_screen.win, bg=Params.color_BG, fg=Params.color_warning, font=Params.font_head)
+label_1_message = tk.Label(win_middle.win, bg=Params.color_BG, fg=Params.color_warning, font=Params.font_head)
 label_1_message.grid(CNF_LABEL_G, row=7, column=2, columnspan=46)
 
     # 0 sheet - client
-label_10_address = tk.Label(win_middle_screen.win, CNF_LABEL, text='IP-Address', font=Params.font_middle)
-entry_10_ip_address = smartify_entry(tk.Entry(win_middle_screen.win, font=Params.font_middle, bg='CadetBlue1'))
-button_10_join = tk.Button(win_middle_screen.win, CNF_MENU_BUTTON, text='Join')
-button_10_back = tk.Button(win_middle_screen.win, CNF_MENU_BUTTON, text='Back')
+label_10_address = tk.Label(win_middle.win, CNF_LABEL, text='IP-Address', font=Params.font_middle)
+entry_10_ip_address = smartify_entry(tk.Entry(win_middle.win, font=Params.font_middle, bg='CadetBlue1'))
+button_10_join = tk.Button(win_middle.win, CNF_MENU_BUTTON, text='Join')
+button_10_back = tk.Button(win_middle.win, CNF_MENU_BUTTON, text='Back')
 
 label_10_address.grid(CNF_LABEL_G, row=2, column=2, columnspan=11)
 entry_10_ip_address.grid(CNF_LABEL_G, row=2, column=14, columnspan=16)
 button_10_join.grid(CNF_LABEL_G, row=2, column=31, columnspan=8)
 button_10_back.grid(CNF_LABEL_G, row=2, column=40, columnspan=8)
 
-sheet_connect = WindowSheet(win_middle_screen,
+sheet_connect = WindowSheet(win_middle,
     grid_items=[entry_10_ip_address, label_10_address, button_10_join, button_10_back])
 
     # 1 sheet - nickname choose
-entry_11_nickname = smartify_entry(tk.Entry(win_middle_screen.win, font=Params.font_middle, bg='CadetBlue1'))
-label_11_nickname = tk.Label(win_middle_screen.win, CNF_LABEL, text='Nickname', font=Params.font_middle)
-button_11_save = tk.Button(win_middle_screen.win, CNF_MENU_BUTTON, text='Save')
-button_11_back = tk.Button(win_middle_screen.win, CNF_MENU_BUTTON, text='Back')
+entry_11_nickname = smartify_entry(tk.Entry(win_middle.win, font=Params.font_middle, bg='CadetBlue1'))
+label_11_nickname = tk.Label(win_middle.win, CNF_LABEL, text='Nickname', font=Params.font_middle)
+button_11_save = tk.Button(win_middle.win, CNF_MENU_BUTTON, text='Save')
+button_11_back = tk.Button(win_middle.win, CNF_MENU_BUTTON, text='Back')
 
 entry_11_nickname.grid(CNF_LABEL_G, row=2, column=14, columnspan=16)
 label_11_nickname.grid(CNF_LABEL_G, row=2, column=2, columnspan=11)
 button_11_save.grid(CNF_LABEL_G, row=2, column=31, columnspan=8)
 button_11_back.grid(CNF_LABEL_G, row=2, column=40, columnspan=8)
 
-sheet_nickname = WindowSheet(win_middle_screen,
+sheet_nickname = WindowSheet(win_middle,
     grid_items=[entry_11_nickname, label_11_nickname, button_11_save, button_11_back])
 
 ##### Third window - game itself
-game_screen = Window('game', TITLE, win_start_menu, Params.color_dark_blue) # 1400x900 - 140 x 90
+game_screen = Window('game', TITLE, win_menu, Params.color_dark_blue) # 1400x900 - 140 x 90
 
     # Always visible widgets
 tk.Label(game_screen.win, bg=Params.color_BG).grid(row=0, column=0, rowspan=90, columnspan=110, sticky='NSEW') # background
@@ -144,9 +144,15 @@ button_20_send.grid(CNF_LABEL_G, row=84, column=134, columnspan=4)
 entry_20_chatmsg.grid(CNF_LABEL_G, row=84, column=112, columnspan=21)
 canvas_20_chat.grid(CNF_IMAGE_G, row=53, column=112, rowspan=30, columnspan=26)
 
+chat = CanvasChat((8, 8), canvas_20_chat, Params.font_super_low, Params.color_gold, 260)
 
+def boba():
+    txt = entry_20_chatmsg.get()
+    entry_20_chatmsg.delete(0, tk.END)
+    chat.add_line('{BLUE}Player:{} ' + txt)
 
-''' PASS, CHECK, FOLD, QUIT, CALL, BET, RAISE '''
+button_20_send.configure(command=boba)
+
 
 lst_20_players_nicknames = [
     tk.Label(game_screen.win, text='', font=Params.font_players, anchor='w',
@@ -199,13 +205,13 @@ _message_id = None
 def message(msg: str):
     global _message_id
     if label_1_message['text'] != '':
-        win_middle_screen.win.after_cancel(_message_id)
+        win_middle.win.after_cancel(_message_id)
     label_1_message['text'] = msg
-    _message_id = win_middle_screen.win.after(4500, lambda: label_1_message.configure(text=''))
+    _message_id = win_middle.win.after(4500, lambda: label_1_message.configure(text=''))
 
 def change_nickname(initial: bool = False):
     def button_control(ev):
-        win_middle_screen.win.update()
+        win_middle.win.update()
         button_11_save.configure(state='normal' if entry_11_nickname.get() else 'disabled')
 
     def confirm():
@@ -213,10 +219,10 @@ def change_nickname(initial: bool = False):
             message('Enter a valid nickname')
             return
         player_parameters['Name'] = entry_11_nickname.get()
-        switch_windows(win_middle_screen, win_start_menu, sheet_main_menu)
-        win_middle_screen.win.unbind_all('<Key>')
+        win_middle.win.unbind_all('<Key>')
+        switch_windows(win_middle, win_menu, sheet_main_menu)
 
-    win_middle_screen.win.bind('<Key>', button_control)
+    win_middle.win.bind('<Key>', button_control)
     entry_11_nickname.delete(0, tk.END)
     entry_11_nickname.insert(0, player_parameters['Name'])
     button_11_save.configure(command=confirm, state='disabled' if initial else 'normal')
@@ -224,9 +230,9 @@ def change_nickname(initial: bool = False):
     button_11_back.configure(
         command=Window.quit_window
         if initial else
-        lambda: switch_windows(win_middle_screen, win_start_menu, sheet_main_menu))
+        lambda: switch_windows(win_middle, win_menu, sheet_main_menu))
 
-    switch_windows(win_start_menu, win_middle_screen, sheet_nickname)
+    switch_windows(win_menu, win_middle, sheet_nickname)
 
 def initial_nickname_check():
     if player_parameters['Name'] == '':
@@ -251,14 +257,14 @@ def host_game(game: Literal['Poker', 'Durak']):
             sendobj(conn, CODE_SHUT_CONN)
             conn.close()
         sock.close()
-        switch_windows(win_middle_screen, win_start_menu, sheet_main_menu)
+        switch_windows(win_middle, win_menu, sheet_main_menu)
     SocketList = list[socket.socket]
 
     game_parameters['Game'] = game
     if game != 'Poker':
         button_02_omaha.grid_remove()
 
-    win_start_menu.show(sheet_lobby_host)
+    win_menu.show(sheet_lobby_host)
 
     trigger_is_closed, trigger_is_started = BoolTrigger(), BoolTrigger()
     button_02_close.configure(command=trigger_is_closed.toggle)
@@ -313,7 +319,7 @@ def host_game(game: Literal['Poker', 'Durak']):
 
         button_02_start.configure(state='disabled' if len(connections) < 2 else 'normal')
 
-        win_start_menu.win.update()
+        win_menu.win.update()
 
     if Window.quit:                                             # if quit app
         return
@@ -322,7 +328,9 @@ def host_game(game: Literal['Poker', 'Durak']):
         close_lobby()
         return
 
-    # Game start, send CODE_SUCCESS to everybody, then client_connections, then CODE_SUCCESS again if everybody is still here
+    # Game start, send CODE_SUCCESS to everybody,
+    # then client_connections, then CODE_SUCCESS
+    # again if everybody is still here
     for conn in connections:                                    # Game start
         if conn == sock:
             continue
@@ -332,7 +340,7 @@ def host_game(game: Literal['Poker', 'Durak']):
         sendobj(conn, [*connections.values()])
         sendobj(conn, CODE_SUCCESS)
 
-    poker_session(connections, sock, True)
+    poker_session_host(connections, sock)
 
 def join_game():
     #NOTE You can't do stuff with widgets while in thread, so it's desirable that
@@ -374,57 +382,57 @@ def join_game():
 
 
     button_10_join.configure(command=run_thread)
-    button_10_back.configure(command=lambda: switch_windows(win_middle_screen, win_start_menu, sheet_main_menu))
-    button_03_leave.configure(command=lambda: switch_windows(win_start_menu, win_middle_screen, sheet_connect))
+    button_10_back.configure(command=lambda: switch_windows(win_middle, win_menu, sheet_main_menu))
+    button_03_leave.configure(command=lambda: switch_windows(win_menu, win_middle, sheet_connect))
 
-    switch_windows(win_start_menu, win_middle_screen, sheet_connect)
+    switch_windows(win_menu, win_middle, sheet_connect)
 
-    while Window.current_window == win_middle_screen:
+    while Window.current_window == win_middle:
         sock: socket.socket = None
 
-        while sock == None and Window.current_window == win_middle_screen:
-            win_middle_screen.win.update()                      # event loop
-            if Window.quit:                                 # quit app
+        while sock == None and Window.current_window == win_middle:
+            win_middle.win.update()                             # event loop
+            if Window.quit:                                     # quit app
                 return
 
-        if Window.current_window != win_middle_screen:          # if left window...
-            if isinstance(sock, socket.socket):             # ...and if connected before he did
+        if Window.current_window != win_middle:                 # if left window...
+            if isinstance(sock, socket.socket):                 # ...and if connected before he did
                 sendobj(sock, CODE_DISCONNECT)
                 recvobj(sock)
-            return                                          # left, so break the loop
+            return                                              # left, so break the loop
 
-        if sock == 0:                                       # bad connection attempt but still at window, continue the loop
+        if sock == 0:                                           # bad connection attempt but still at window, continue the loop
             continue
 
-        break                                               # successful connection attempt
+        break                                                   # successful connection attempt
 
-    switch_windows(win_middle_screen, win_start_menu, sheet_lobby_player)
+    switch_windows(win_middle, win_menu, sheet_lobby_player)
     trigger_game_started, trigger_left_lobby = BoolTrigger(), BoolTrigger()
 
-    while not (trigger_game_started or trigger_left_lobby) and Window.current_window == win_start_menu and not Window.quit:
+    while not (trigger_game_started or trigger_left_lobby) and Window.current_window == win_menu and not Window.quit:
 
         data: Union[list[str], GameCode] = recvobj(sock)
         if not isinstance(data, GameCode):
             client_connections = data
             [lst_02_players[i].configure(text = (client_connections + [''] * 8)[i]) for i in range(8)]
-        elif data == CODE_SHUT_CONN:                        # host closed lobby
+        elif data == CODE_SHUT_CONN:                            # host closed lobby
             trigger_left_lobby.toggle()
-        elif data == CODE_SUCCESS:                          # game starts
+        elif data == CODE_SUCCESS:                              # game starts
             trigger_game_started.toggle()
         else:
             print(f'undescribed data recieved {data}')
-        win_start_menu.win.update()
+        win_menu.win.update()
 
     if Window.quit:
         return
 
-    if trigger_left_lobby:                                  # disconnected
-        switch_windows(win_start_menu, win_middle_screen, sheet_connect)
+    if trigger_left_lobby:                                      # disconnected
+        switch_windows(win_menu, win_middle, sheet_connect)
         message('Game closed')
         join_game()
         return
 
-    if Window.current_window != win_start_menu:                 # left thru button
+    if Window.current_window != win_menu:                       # left thru button
         sendobj(sock, CODE_DISCONNECT)
         recvobj(sock)
         join_game()
@@ -436,79 +444,152 @@ def join_game():
     # or somebody fell before and server shut
     if not client_connections or recvobj(sock) == CODE_SHUT_CONN:
         print('failure\a')
-        switch_windows(win_start_menu, win_middle_screen, sheet_connect)
+        switch_windows(win_menu, win_middle, sheet_connect)
         message('Connection lost' if not client_connections else 'Game closed')
         join_game()
 
     playing = True
     while playing:
-        playing = poker_session(client_connections, sock)
+        playing = poker_session_player(client_connections, sock)
         ...
     ...
     #TODO: further depends on result
 
+#TODO: general security and connection error-proofness ahead
+def poker_session_host(connections: dict[socket.socket, str], sock: socket.socket):
+    def handle_chat(chat: CanvasChat):
+        pass
+
+    chat = CanvasChat((15, 15), canvas_20_chat, Params.font_chat)
+
+    ...
 
 
-def poker_session(connections: Union[dict[socket.socket, str], list[str]], sock: socket.socket, host: bool = False):
-    #TODO: general security and connection error-proofness ahead
-
-    chat = ChatHandler((15, 15), canvas_20_chat, Params.font_chat)
-
-    def handle_chat(chat: ChatHandler, message: str, sock: socket.socket, recieved = False):
-        '''
-        > if recieved:
-            >
-
-        > send chat message to the server
-        > get answered
-        > post message
-        '''
-        if recieved:
-            chat.add_line(message)
-            return
-        sock.send(PokerEvent(10))
-
-        pass #TODO:
 
 
-    #TODO:
-    # additional threads:
-    # in one thread, a game goes
-        # a game should recieve events from players and send them to MainEventHandler
-    # in another thread, there's a MainEventHandler
-        # handler analyzes the events in queue and reacts accordingly, sending info to game thread or server thread
-    # server thread happens to be main thread
-        # server should recieve events from MainEventHandler and send them to players
-    #TODO:
 
-    #TODO:
-
-    #TODO:
+def poker_session_player(names: list[str], sock: socket.socket, name: str):
 
 
-    for place, conn in enumerate(connections):
-        lst_20_players_nicknames[place]['text'] = f'▶ {connections[conn] if host else conn}'
+
+
+    '''
+    - показать игроков
+    - показать фишки всех игроков
+    - показать карты всех игроков на столе
+    - круги
+    - показать карты игроков (большие)
+    '''
+
+    # function to print to chat
+    def print_message(chat: CanvasChat, msg: str, player_name: str):
+        p = player_name if player_name != name else 'You'
+        chat.add_line('{GREEN}' + p + '{}: ' + msg)
+
+    def show_player(sit: int, name: int):
+
+        pass
+
+
+
+    def send_msg():
+        def _():
+            text = entry_20_chatmsg.get()
+            entry_20_chatmsg.delete(0, tk.END)
+            sendobj(sock, MyEvent(10, name, text))
+        thr.Thread(target=_).start()
+
+    # ... to show fishki
+    def show_tokens(sit: int, quantity):
+        pass
+
+    # ... to show cards
+    def show_table_cards(cards: list[Card], amount: int):
+        pass
+
+    # ... to show players (nicks + seat circles)
+    def show_player(sit: int, nickname: str):
+        pass
+
+    # ... to show player cards (on the table)
+    def show_player_cards(sit: int, game_type: bool):
+        pass
+
+    # ... to show player cards (showdown)
+    def showdown_player_cards(sit: int, cards: list[Card]):
+        pass
+
+
+    def disconnect_player():
+        pass
+
+    def player_action():
+        pass
+
+    # Codes: 1 - Player, 0 - Server
+    # 1 - conn - action (+args)
+    # 1 - conn - chat message
+    # 1 - conn - disconnect
+    # 0 - text message
+    # 0 - game finished
+    # 0 - game continues
+    # Actions:
+    player_actions = {
+        -1: disconnect_player,
+        0: print_message,
+        **{i : player_action for i in range(1, 9)},
+        10: print_message
+    }
+
+    {
+        "Shutdown"          : -5,                               # server
+        "Timeout"           : -2,                               # player
+        "Disconnect"        : -1,                               # player
+        "Act"               : 0,                                # player ...
+            "Check"         : 1,
+            "Call"          : 2,                                    # argument - sum
+            "Bet"           : 3,                                    # argument - sum
+            "Raise"         : 4,
+            "Fold"          : 5,
+            "Quit"          : 6,
+            "Muck"          : 7,
+            "Show"          : 8,
+        "Chat message"      : 10
+    }
+
+    chat = CanvasChat((15, 15), canvas_20_chat, Params.font_chat)
+
+    for place, player in enumerate(names):
+        lst_20_players_nicknames[place]['text'] = f'▶ {player}'
         lst_20_players_nicknames[place].grid(CNF_LABEL_G, row = 5*(place + 1), column=112, columnspan=20)
 
-    switch_windows(win_start_menu, game_screen, sheet_poker)
+
+    button_20_send.configure(command=...) #TODO:
 
     [Card(game_screen, (ORDER[8 + i], DIAMOND), small=True).grid(row=33, column=33 + 9*i) for i in range(5)]
     # card positions ^^^^^
 
-    button_20_send.configure(command=chat) #TODO:
+    switch_windows(win_menu, game_screen, sheet_poker)
 
-    if host:
+    ...
+
+    run = True
+    while run:
+        data: MyEvent = recvobj(sock)
+        print(data)
+
+        if data.code == 0:
+            ...
+            continue
 
 
 
-        list.a(font=Params.font_players, anchor='nw', bg=Params.color_dark_blue, fg=Params.color_gold)
+
+
+
+
+
         ...
-
-    else:
-
-        ...
-
-    return ...
 
 
     #TODO:
@@ -526,12 +607,12 @@ def poker_session(connections: Union[dict[socket.socket, str], list[str]], sock:
 
 
 def main():
-    # win_start_menu.show(sheet_main_menu)
-    # initial_nickname_check()
+    win_menu.show(sheet_main_menu)
+    initial_nickname_check()
 
-    game_screen.show(sheet_poker)
+    # game_screen.show(sheet_poker)
 
-    win_start_menu.mainloop()
+    win_menu.mainloop()
 
 if __name__ == '__main__':
     main()
