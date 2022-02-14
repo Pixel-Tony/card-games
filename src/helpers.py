@@ -26,12 +26,12 @@ def exception_proof_ish(return_arg=False):
 def end_join(iterable, sep: str = ' ', end: str = ' '):
     return end.join([sep.join(iterable[:-1]), iterable[-1]])
 
-class BoolTrigger:
-    instances: list['BoolTrigger'] = []
+class Trigger:
+    instances: list['Trigger'] = []
 
     def __init__(self, state = False) -> None:
         self.state = state
-        BoolTrigger.instances += [self]
+        Trigger.instances += [self]
 
     def __bool__(self) -> bool:
         return bool(self.state)
@@ -74,6 +74,7 @@ class Params:
     color_grey = '#aaa'
     color_warning = '#fe1'
     color_BG = '#484'
+    color_BG_game = '#16b'
     color_black = '#000922'
     color_dark_blue = '#002030'
     color_gold = '#ff3'
@@ -117,7 +118,7 @@ __all__ = [
     'end_join',
 
     # classes
-    'BoolTrigger',
+    'Trigger',
     'GameCode',
     'PokerCombination',
     'Params',

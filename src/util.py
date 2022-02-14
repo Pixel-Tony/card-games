@@ -61,6 +61,7 @@ __all__ = [
     # variables
     'game_parameters',
     'player_parameters',
+    't',
 
     # classes
     'Literal',
@@ -69,7 +70,7 @@ __all__ = [
     'Params',
     'WImage',
     'GameCode',
-    'BoolTrigger',
+    'Trigger',
     'Window',
     'Card',
     'TableSeat',
@@ -78,6 +79,7 @@ __all__ = [
     'PokerTable',
     'WindowSheet',
     'CanvasChat',
+    'MyPrimitiveEventQueue',
 ]
 
 # # # # # # # # # # # # # # # # | SERVER | # # # # # # # # # # # # # # # #
@@ -90,7 +92,7 @@ def get_ip() -> str:
 
 @exception_proof_ish(True)
 def recvobj(sock_where: socket.socket):
-    '''Recieve an object from `sock_where`\n\n return None on success'''
+    '''Receive an object from `sock_where`\n\n return None on success'''
     objlen = sock_where.recv(HEADLEN).decode()
     if not objlen:
         return None
@@ -243,7 +245,7 @@ else:
     player_parameters = {'Name' : '', 'IP' : ''}
 
 class WImage:
-    '''``cached tk.PhotoImage'''
+    '''cached tk.PhotoImage'''
     cache = []
     def __new__(cls, master: 'Window', file) -> 'WImage':
         instance = tk.PhotoImage(master=master.win, file=file)
@@ -280,7 +282,7 @@ class Window:
 
     @classmethod
     def quit_window(cls):
-        BoolTrigger.disable()
+        Trigger.disable()
         for w in Window.__ins:
             w.win.destroy()
         Window.quit = True
@@ -432,18 +434,92 @@ class Card:
     def __init__(self, master: 'Window', card_value: tuple[Union[int, str], str], shirt_up: bool = False, small: bool = False) -> None:
         self.rank, self.suit = card_value
         self.master = master
-        self.shirt_up = shirt_up
+        self.is_shirt_up = shirt_up
+        self.is_small = small
         file = DIR + r'\gfx\cards\\' + str(DECK.index(card_value)) + ('.png' if not small else '_small.png')
         self.label = tk.Label(master.win, image=WImage(self.master, file))
+        self.__manager = None
 
     def grid(self, row: int, column: int) -> None:
+        assert not self.is_small, 'can\'t grid() small card'
         self.label.grid(row=row, column=column, rowspan=13, columnspan=8, sticky='NWES')
+        self.__manager = 'grid'
+
+    def place(self, x: int, y: int):
+        self.label.place(x=x, y=y,
+            width=64 if self.is_small else 80,
+            height=120 if self.is_small else 130)
+        self.__manager = 'place'
+
+    def hide(self):
+        self.label.grid_remove() if self.__manager == 'grid' else self.label.place_forget()
 
     def __repr__(self) -> str:
         return f'<Card, {self.rank} of {self.suit}>'
 
     def __getitem__(self, val):
         return [self.rank, self.suit][val]
+
+class sprites:
+    #pixel positions of all player "equipment" - chips, cards and real cards positions for showing
+    #TODO: card positions (after seat graphics)                                              blue     green       red
+    __coords = {
+        0 : {'table': (216, 306), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((27, 28), (26, 28), (25, 29)), 'seat': (0, 0)},
+        1 : {'table': (436, 264), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((51, 28), (51, 27), (50, 27)), 'seat': (0, 0)},
+        2 : {'table': (616, 264), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((70, 27), (69, 27), (68, 27)), 'seat': (0, 0)},
+        3 : {'table': (818, 306), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((83, 28), (83, 29), (84, 29)), 'seat': (0, 0)},
+        4 : {'table': (813, 420), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((82, 50), (83, 50), (84, 49)), 'seat': (0, 0)},
+        5 : {'table': (616, 472), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((67, 50), (68, 50), (69, 51)), 'seat': (0, 0)},
+        6 : {'table': (436, 472), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((39, 51), (40, 51), (41, 51)), 'seat': (0, 0)},
+        7 : {'table': (216, 416), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((26, 49), (27, 49), (27, 50)), 'seat': (0, 0)}
+    }
+    def __init__(self, master: Window, sit: int) -> None:
+        self.sit_num = sit
+        self.master = master
+        # self.seat: WImage #TODO: seat
+        # self.seat.place()
+        file = DIR + f"/gfx/cards/cards{'_down'*(sit in [0, 4]) + '_up'*(sit in [3, 7])}.png"
+        self.magic_numbers = [0, 330, 620]
+        self.small_cards = tk.Label(master.win, image=WImage(master, file))
+
+        self.tokens: list[tk.Label] = []
+        for color in ['blue', 'green', 'red']:
+            self.tokens.append(tk.Label(master.win,
+                image=WImage(master, DIR + rf'\gfx\tokens\token {color}.png')))
+
+    def show_tokens(self, p_bankroll: int):
+        n = sum(p_bankroll > a for a in self.magic_numbers)
+        for i, token in enumerate(self.tokens[:n]):
+            row, column = self.__coords[self.sit_num]['chips'][i]
+            token.grid(row=row, column=column, rowspan=1, columnspan=1)
+
+        for token in self.tokens[n:]:
+            token.grid_remove()
+
+    def hide_tokens(self):
+        [token.grid_remove() for token in self.tokens]
+
+    def show_table_cards(self):
+        x, y = self.__coords[self.sit_num]['table']
+        w, h = ((66, 69) if self.sit_num in [3, 7] else         # diagonal /
+                (71, 66) if self.sit_num in [0, 4] else         # diagonal \
+                (48, 55))                                       # vertical |
+        self.small_cards.place(x=x, y=y, width=w, height=h)
+
+    def hide_table_cards(self):
+        self.small_cards.place_forget()
+
+    def show_cards(self, cards: list[Card], game_type: bool, time: float):
+        def hide_cards():
+            map(tk.Place.place_forget, cards)
+
+        x, y = self.__coords['cards'][['Poker', 'Omaha'][game_type]]
+        for i in range(4 if game_type else 2):
+            cards[i].place(x, y)
+
+        self.master.win.after(time*1000, hide_cards)
+
+
 
 class TableSeat:
     coords = { #pixel positions of all player "equipment" - chips, cards and real cards positions for showing #TODO: card positions (after seat graphics)
@@ -481,9 +557,11 @@ class TableSeat:
     def show_player_cards(self): '''show REAL cards'''
 
 class PokerPlayer:
-    def __init__(self, name: str, place: int, conn: socket.socket):
-        self.name, self.conn = name, conn
-        self.place, self.seat = TableSeat(place), place
+    def __init__(self, name: str, sit: int, conn: socket.socket, master: Window):
+        self.name = name
+        self.conn = conn
+        self.sit = sit
+        self.sprites = sprites(master, sit)
         self.current_bet = 0
         self.did_move = False
         self.is_dealer = False
@@ -509,35 +587,29 @@ class PokerPlayer:
             options.append('raise')
         options.extend(['fold', 'quit'])
 
-        answer = True #DO send request
+        answer = ... #DO send request
         #DO:
         if answer == 'check':
-            # bet stays the same
-            '''player calls'''
+            ...
         elif answer == 'call':
             self.current_bet = bet
-            '''player calls'''
-        #DO
+            ...
         elif answer in "FQ": # messages
             self.is_out = True
             if answer == "Q":
                 self.bankroll = 0
+            ...
         elif answer == "A":
             self.bet(self.bankroll)
+            ...
         elif answer in 'BR':
             minimum = max(bet, small_blind * 4) if answer == "R" else small_blind * 2
             new_bet: int # get a new bet
             self.bet(new_bet)
-
-
-
-
-
-
-
+            ...
 
     def bet(self, bet: int, sb=False, bb=False):
-        pass#TODO:
+        ... #TODO:
 
 class PokerTable:
     def __init__(self, *players: PokerPlayer, event_manager) -> None:
@@ -578,8 +650,8 @@ class PokerTable:
             bet = 0
             if game_state == 0:
                 #DO sb, bb
-                self.players[(dealer_place + 1) % sits].bet(small_blind, sb=True)
-                self.players[(dealer_place + 2) % sits].bet(small_blind * 2, bb=True)
+                (lambda player: player.bet(min(small_blind, player.bankroll), sb=True))(self.players[(dealer_place + 1) % sits])
+                (lambda player: player.bet(min(small_blind*2, player.bankroll), bb=True))(self.players[(dealer_place + 2) % sits])
                 bet = max([a.current_bet for a in self.players])
                 counter = (dealer_place + 3) % sits
 
@@ -653,8 +725,8 @@ class MyPrimitiveEventQueue:
         def __exit__(self, *err_args):
             self.lock = False
 
-    def __init__(self, dt = 1/350) -> None:
-        self.dt = dt
+    def __init__(self, pause_s: float = 1/350) -> None:
+        self.dt = pause_s
         self.lock = self.Lock()
         self.queue: list[MyEvent] = []
 
@@ -670,7 +742,7 @@ class MyPrimitiveEventQueue:
         self.queue.append(event)
 
     @__lock_control
-    def get(self, tag=None):
+    def pop(self, tag=None):
         '''Return None if no value with tag was found'''
 
         if not len(self.queue):

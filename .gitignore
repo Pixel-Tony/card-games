@@ -1,6 +1,7 @@
 
 workspace.code-workspace
 .vscode/
+src/__pycache__
 test.py
 src/idea_dump.py
-utils\fool.py
+utils/fool.py
