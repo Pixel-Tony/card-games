@@ -74,7 +74,8 @@ class Params:
     color_grey = '#aaa'
     color_warning = '#fe1'
     color_BG = '#484'
-    color_BG_game = '#16b'
+    color_BG_game = '#1045a0'
+    # color_BG_game = '#825'
     color_black = '#000922'
     color_dark_blue = '#002030'
     color_gold = '#ff3'
@@ -90,14 +91,35 @@ CNF_LABEL_G = {'rowspan' : 4, 'sticky' : 'NEWS'}
 CNF_IMAGE_G = {'sticky' : 'NEWS'}
 CNF_GAME_BUTTON_G = {'rowspan' : 6, 'columnspan' : 9, 'sticky' : 'NEWS'}
 
+
+ACTIONS_CHECK = 'Check'
+ACTIONS_BET = 'Bet'
+ACTIONS_RAISE = 'Raise'
+ACTIONS_CALL = 'Call'
+ACTIONS_FOLD = 'Fold'
+ACTIONS_SHOW = 'Show'
+ACTIONS_MUCK = 'Muck'
+ACTIONS_QUIT = 'Quit'
+
 __all__ = [
     # constants
     'HEADLEN',
+
     'CODE_NAME_EXISTS',
     'CODE_SHUT_CONN',
     'CODE_SUCCESS',
     'CODE_DISCONNECT',
     'CODE_SERVER_FULL',
+
+    'ACTIONS_CHECK',
+    'ACTIONS_BET',
+    'ACTIONS_RAISE',
+    'ACTIONS_CALL',
+    'ACTIONS_FOLD',
+    'ACTIONS_SHOW',
+    'ACTIONS_MUCK',
+    'ACTIONS_QUIT',
+
     'SUITS',
     'SPADE',
     'HEART',
@@ -105,11 +127,13 @@ __all__ = [
     'DIAMOND',
     'ORDER',
     'DECK',
+
     'CNF_MENU_BUTTON',
     'CNF_LABEL',
     'CNF_LABEL_G',
     'CNF_IMAGE_G',
     'CNF_GAME_BUTTON_G',
+
     'SOCKET_TIMEOUT',
 
     # functions
@@ -123,5 +147,4 @@ __all__ = [
     'PokerCombination',
     'Params',
 ]
-
 

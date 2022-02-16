@@ -1,6 +1,6 @@
 from functools import reduce
 from itertools import combinations as iter_combs
-from typing import Literal, Union
+from typing import Literal, Union, Any
 from random import shuffle, choice
 import urllib.request, urllib.error
 import tkinter as tk
@@ -21,22 +21,36 @@ __all__ = [
     'SUITS',
     'ORDER',
     'DECK',
+
     'IP',
     'PORT',
+
     'DIR',
     'TITLE',
     'DIMS',
+
     'CODE_NAME_EXISTS',
     'CODE_SHUT_CONN',
     'CODE_SUCCESS',
     'CODE_DISCONNECT',
     'CODE_SERVER_FULL',
+
     'CNF_MENU_BUTTON',
     'CNF_LABEL',
     'CNF_LABEL_G',
     'CNF_IMAGE_G',
     'CNF_GAME_BUTTON_G',
+
     'SOCKET_TIMEOUT',
+
+    'ACTIONS_CHECK',
+    'ACTIONS_BET',
+    'ACTIONS_RAISE',
+    'ACTIONS_CALL',
+    'ACTIONS_FOLD',
+    'ACTIONS_SHOW',
+    'ACTIONS_MUCK',
+    'ACTIONS_QUIT',
 
     # modules
     'socket',
@@ -66,20 +80,24 @@ __all__ = [
     # classes
     'Literal',
     'Union',
+    'Any',
+
     'PokerCombination',
     'Params',
-    'WImage',
-    'GameCode',
     'Trigger',
+    'GameCode',
+
+    'WImage',
+    'WindowSheet',
     'Window',
     'Card',
-    'TableSeat',
-    'MyEvent',
+    'CanvasChat',
+
     'PokerPlayer',
     'PokerTable',
-    'WindowSheet',
-    'CanvasChat',
-    'MyPrimitiveEventQueue',
+
+    'MyEvent',
+    'EventQueue',
 ]
 
 # # # # # # # # # # # # # # # # | SERVER | # # # # # # # # # # # # # # # #
@@ -391,10 +409,11 @@ class CanvasChat:
         self.canv = canv
         self.x, self.y = coords
         self.font = tkf.Font(self.canv, font)
-        self.max_llen = width - self.x
+        self.MAX_LINE_LEN = width - self.x
         self.fill = fill
 
     def add_line(self, line: str):
+        num_lines = 1
         colors = {
             'BLUE'      : '#55F',
             'RED'       : '#F55',
@@ -411,24 +430,37 @@ class CanvasChat:
             char = line[0]
             line = line[1:]
 
-            if char == '{':
-                while char[-1] != '}':
+            if char == '#':
+                while char[-1] != '#':
                     char += line[0]
                     line = line[1:]
                 col = char[1:][:-1]                             # trim brackets
                 if col in colors:                               #DO possibilities for other tags
                     color = colors[col]
+                else:
+                    while col:
+                        char = col[0]
+                        col = col[1:]
+                        if self.font.measure(char) + x + 1 > self.MAX_LINE_LEN:
+                            x = self.x
+                            y += self.LETTER_HEIGHT + 2
+                            num_lines += 1
+
+                        self.canv.create_text(x, y, text=char, anchor='nw', justify='left', font=self.font, fill=color)
+                        x += self.font.measure(char) + 1
                 continue
 
-            if self.font.measure(char) + x + 1 > self.max_llen:
+
+            if self.font.measure(char) + x + 1 > self.MAX_LINE_LEN:
                 x = self.x
                 y += self.LETTER_HEIGHT + 2
+                num_lines += 1
 
             self.canv.create_text(x, y, text=char, anchor='nw', justify='left', font=self.font, fill=color)
             x += self.font.measure(char) + 1
 
-        y += self.LETTER_HEIGHT + 5
-        self.y = y
+        self.y = y + self.LETTER_HEIGHT + 5
+        return num_lines
 
 class Card:
     def __init__(self, master: 'Window', card_value: tuple[Union[int, str], str], shirt_up: bool = False, small: bool = False) -> None:
@@ -490,7 +522,7 @@ class sprites:
     def show_tokens(self, p_bankroll: int):
         n = sum(p_bankroll > a for a in self.magic_numbers)
         for i, token in enumerate(self.tokens[:n]):
-            row, column = self.__coords[self.sit_num]['chips'][i]
+            column, row = self.__coords[self.sit_num]['chips'][i]
             token.grid(row=row, column=column, rowspan=1, columnspan=1)
 
         for token in self.tokens[n:]:
@@ -519,42 +551,84 @@ class sprites:
 
         self.master.win.after(time*1000, hide_cards)
 
-
-
-class TableSeat:
-    coords = { #pixel positions of all player "equipment" - chips, cards and real cards positions for showing #TODO: card positions (after seat graphics)
-        0 : {'table': (216, 306), 'cards': (0, 0), 'chips': ((27, 28), (26, 28), (25, 29)), 'seat': (0, 0)}, # blue, green, red ("rgb backwards")
-        1 : {'table': (436, 264), 'cards': (0, 0), 'chips': ((51, 28), (51, 27), (50, 27)), 'seat': (0, 0)},
-        2 : {'table': (616, 264), 'cards': (0, 0), 'chips': ((70, 27), (69, 27), (68, 27)), 'seat': (0, 0)},
-        3 : {'table': (818, 306), 'cards': (0, 0), 'chips': ((83, 28), (83, 29), (84, 29)), 'seat': (0, 0)},
-        4 : {'table': (813, 420), 'cards': (0, 0), 'chips': ((82, 50), (83, 50), (84, 49)), 'seat': (0, 0)},
-        5 : {'table': (616, 472), 'cards': (0, 0), 'chips': ((67, 50), (68, 50), (69, 51)), 'seat': (0, 0)},
-        6 : {'table': (436, 472), 'cards': (0, 0), 'chips': ((39, 51), (40, 51), (41, 51)), 'seat': (0, 0)},
-        7 : {'table': (216, 416), 'cards': (0, 0), 'chips': ((26, 49), (27, 49), (27, 50)), 'seat': (0, 0)}
+class MyEvent:
+    '''```
+    | Shutdown      -5 | Timeout       -2 |
+    | Disconnect    -1 | Act            0 |
+    | Check          1 | Call           2 |
+    | Bet            3 | Raise          4 |
+    | Fold           5 | Quit           6 |
+    | Muck           7 | Show           8 |
+    | Chat message  10 | Game finished 12 |
+    | Game goes on  13 |
+    '''
+    # Server - game finished
+    # Server - game continues
+    codes = {
+        'Shutdown'          : -5,                               # server
+        'Timeout'           : -2,                               # player
+        'Disconnect'        : -1,                               # player
+        'Act'               :  0,                               # player ...
+        ACTIONS_CHECK       :  1,
+        ACTIONS_CALL        :  2,                                   # argument - sum
+        ACTIONS_BET         :  3,                                   # argument - sum
+        ACTIONS_RAISE       :  4,
+        ACTIONS_FOLD        :  5,
+        ACTIONS_QUIT        :  6,
+        ACTIONS_MUCK        :  7,
+        ACTIONS_SHOW        :  8,
+        'Chat message'      : 10,                               # player
     }
-    def __init__(self, master: Window, place: int, *cards: Card) -> None:
-        self.place, self.cards = place, cards
-        file = DIR + fr"\gfx\cards\cards{'_down' if self.place in [0, 4] else '_up' if self.place in [3, 7] else ''}.png"
-        self.cards_label = tk.Label(master.win, image=WImage(master, file))
 
-        width, height = ((66, 69) if self.place in [3, 7] else ((71, 66) if self.place in [0, 4] else (48, 55)))
-        self.tokens = [tk.Label(master.win, image=WImage(master, DIR + rf'\gfx\tokens\token {color}.png')) for color in ['blue', 'green', 'red']]
-        x, y = TableSeat.coords[self.place]['table']
-        self.place_params = {'x' : x, 'y' : y, 'width' : width, 'height' : height}
+    def __init__(self, code, name, args = None):
+        self.code = code
+        self.name = name
+        self.args = args
 
-    def show_table_cards(self):
-        '''show cards on the table'''
-        self.cards_label.place(**self.place_params)
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__}, code={self.code}, name={self.name}, args={self.args}>'
 
-    def display_tokens(self, num: int):
-        for token in self.tokens:
-            token.grid_remove()
-        for i in range(num):
-            x, y = TableSeat.coords[self.place]['chips'][i]
-            self.tokens[i].grid(row=y, column=x, rowspan=1, columnspan=1, sticky="NWES")
+class EventQueue:
+    class Lock:
+        def __init__(self):
+            self.lock = False
 
-    def hide_cards(self):'''hide cards from the table'''
-    def show_player_cards(self): '''show REAL cards'''
+        def __enter__(self):
+            while self.lock:
+                continue
+            self.lock = True
+
+        def __exit__(self, *err_args):
+            self.lock = False
+
+    def __init__(self, pause_s: float = 1/350) -> None:
+        self.dt = pause_s
+        self.lock = self.Lock()
+        self.queue: list[MyEvent] = []
+
+    def __lock_control(func):
+        def _(self: 'EventQueue', *args):
+            t.sleep(self.dt)
+            with self.lock:
+                return func(self, *args)
+        return _
+
+    @__lock_control
+    def push(self, event: 'MyEvent'):
+        self.queue.append(event)
+
+    @__lock_control
+    def pop(self, tag=None):
+        '''Return None if no value with tag was found'''
+
+        if not len(self.queue):
+            return
+        if tag == None:
+            return self.queue.pop(0)
+
+        for i, elem in enumerate(self.queue):
+            if elem.tag == tag:
+                return self.queue.pop(i)[1]
 
 class PokerPlayer:
     def __init__(self, name: str, sit: int, conn: socket.socket, master: Window):
@@ -572,52 +646,54 @@ class PokerPlayer:
         self.bankroll = 1000
         self.cards = []
 
-    def action(self, bet=0, small_blind=10):
-        self.did_move = True
-        options = []
-        if bet <= self.current_bet:
-            options.append('check')
-        elif self.bankroll > bet:
-            options.append('call')
-        else:
-            options.append('all-in')
-        if bet == 0:
-            options.append('bet')
-        elif self.bankroll > bet*2:
-            options.append('raise')
-        options.extend(['fold', 'quit'])
-
-        answer = ... #DO send request
-        #DO:
-        if answer == 'check':
-            ...
-        elif answer == 'call':
-            self.current_bet = bet
-            ...
-        elif answer in "FQ": # messages
-            self.is_out = True
-            if answer == "Q":
-                self.bankroll = 0
-            ...
-        elif answer == "A":
-            self.bet(self.bankroll)
-            ...
-        elif answer in 'BR':
-            minimum = max(bet, small_blind * 4) if answer == "R" else small_blind * 2
-            new_bet: int # get a new bet
-            self.bet(new_bet)
-            ...
-
-    def bet(self, bet: int, sb=False, bb=False):
-        ... #TODO:
-
+#TODO: redo at all, send messages to players with args
+# as player options, except conns which can't be sent
+# as pickled objects
 class PokerTable:
     def __init__(self, *players: PokerPlayer, event_manager) -> None:
         self.players = players
 
     def set_default(self): [p.set_default for p in self.players]
 
-    def party(self, small_blind, game_type):
+    def party(self, small_blind, game_type, queue: EventQueue):
+        def get_options(p: 'PokerPlayer', bet=0):
+            p.did_move = True
+            options = []
+            if bet <= p.current_bet:
+                options.append(ACTIONS_CHECK)
+            else:
+                options.append(ACTIONS_CALL)
+
+            if bet == 0:
+                options.append(ACTIONS_BET)
+            elif p.bankroll > bet*2:
+                options.append(ACTIONS_RAISE)
+            options.extend([ACTIONS_FOLD, ACTIONS_QUIT])
+
+            return options
+
+        def parse_p_action(action: str, small_blind): #TODO:
+            if action == ACTIONS_CHECK:
+                pass
+            elif action == ACTIONS_BET:
+                pass
+            elif action == ACTIONS_CALL:
+                pass
+            elif action == ACTIONS_RAISE:
+                pass
+            elif action == ACTIONS_FOLD:
+                pass
+            elif action == ACTIONS_SHOW:
+                pass
+            elif action == ACTIONS_MUCK:
+                pass
+            else:       ## ACTIONS_QUIT
+                pass
+
+            return ...
+
+
+
         def check_the_bets(bet: int):
             '''All the players did move, called or all-in'd or folded'''
             return all([p.did_move and (p.current_bet in [bet, p.bankroll] or p.is_out) for p in self.players])
@@ -649,9 +725,12 @@ class PokerTable:
             #DO send game info to every player
             bet = 0
             if game_state == 0:
-                #DO sb, bb
+                #TODO: sb, bb since doesn't count inactive players
+
                 (lambda player: player.bet(min(small_blind, player.bankroll), sb=True))(self.players[(dealer_place + 1) % sits])
                 (lambda player: player.bet(min(small_blind*2, player.bankroll), bb=True))(self.players[(dealer_place + 2) % sits])
+
+
                 bet = max([a.current_bet for a in self.players])
                 counter = (dealer_place + 3) % sits
 
@@ -711,78 +790,3 @@ class PokerTable:
             self.party(small_blind * 2**(rounds//5), game_type)
             rounds += 1
         #DO announce that the game finished and choose to either continue or exit
-
-class MyPrimitiveEventQueue:
-    class Lock:
-        def __init__(self):
-            self.lock = False
-
-        def __enter__(self):
-            while self.lock:
-                continue
-            self.lock = True
-
-        def __exit__(self, *err_args):
-            self.lock = False
-
-    def __init__(self, pause_s: float = 1/350) -> None:
-        self.dt = pause_s
-        self.lock = self.Lock()
-        self.queue: list[MyEvent] = []
-
-    def __lock_control(func):
-        def _(self: 'MyPrimitiveEventQueue', *args):
-            t.sleep(self.dt)
-            with self.lock:
-                return func(self, *args)
-        return _
-
-    @__lock_control
-    def push(self, event: 'MyEvent'):
-        self.queue.append(event)
-
-    @__lock_control
-    def pop(self, tag=None):
-        '''Return None if no value with tag was found'''
-
-        if not len(self.queue):
-            return
-        if tag == None:
-            return self.queue.pop(0)
-
-        for i, elem in enumerate(self.queue):
-            if elem.tag == tag:
-                return self.queue.pop(i)[1]
-
-class MyEvent:
-    # Codes: 0 - Player, 1 - Server
-    # Player - conn - action (+args)
-    # Player - conn - chat message
-    # Player - conn - disconnect
-    # Server - text message
-    # Server - game finished
-    # Server - game continues
-    # Actions:
-    codes = {
-        "Shutdown"          : -5,                               # server
-        "Timeout"           : -2,                               # player
-        "Disconnect"        : -1,                               # player
-        "Act"               : 0,                                # player ...
-            "Check"         : 1,
-            "Call"          : 2,                                    # argument - sum
-            "Bet"           : 3,                                    # argument - sum
-            "Raise"         : 4,
-            "Fold"          : 5,
-            "Quit"          : 6,
-            "Muck"          : 7,
-            "Show"          : 8,
-        "Chat message"      : 10                                # player
-    }
-
-    def __init__(self, code, name, args: tuple = None):
-        self.code = code
-        self.name = name
-        self.args = args
-
-    def __repr__(self) -> str:
-        return f'<{self.__class__.__name__}, code={self.code}, name={self.name}, args={self.args}>'

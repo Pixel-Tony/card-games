@@ -132,7 +132,7 @@ tk.Label(win_game.win, bg=Params.color_BG_game).grid(row=0, column=0, rowspan=90
     # Sheet 0 - Poker table
 sheet_poker = WindowSheet(win_game)
 
-label_20_table = tk.Label(win_game.win, image=WImage(win_game, DIR + r'\gfx\misc\table.png'))
+label_20_table = tk.Label(win_game.win, image=WImage(win_game, DIR + r'\gfx\misc\table3.png'))
 label_20_players = tk.Label(win_game.win, text='Players', bg=Params.color_dark_blue, font=Params.font_head, fg=Params.color_white)
 label_20_line = tk.Label(win_game.win, bg=Params.color_white)
 label_20_chat = tk.Label(win_game.win, text='Chat', bg=Params.color_dark_blue, font=Params.font_head, fg=Params.color_white)
@@ -149,17 +149,19 @@ lst_20_players_nicknames = [
     bg=Params.color_dark_blue, fg=Params.color_gold) for i in range(8)]
 
 
-button_20_check = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Check')
-button_20_call = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Call')
-button_20_show = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Show')
+button_20_check = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_CHECK)
+button_20_call = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_CALL)
+button_20_show = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_SHOW)
 
-button_20_bet = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Bet')
-button_20_raise = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Raise')
+button_20_bet = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_BET)
+button_20_raise = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_RAISE)
 
-button_20_fold = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Fold')
-button_20_muck = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Muck')
+button_20_fold = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_FOLD)
+button_20_muck = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_MUCK)
 
-button_20_quit = tk.Button(win_game.win, CNF_MENU_BUTTON, text='Quit')
+button_20_quit = tk.Button(win_game.win, CNF_MENU_BUTTON, text=ACTIONS_QUIT)
+
+slider_20_bet: tk.Scale = None #TODO: slider for betting and raising
 
 for button in [button_20_check, button_20_call, button_20_show]:
     button.grid(CNF_GAME_BUTTON_G) #DO
@@ -189,7 +191,6 @@ sheet_poker.add_place(label_20_line)
 win_game.enable_debug()
 
 
-################################################################# Deeds
 _message_id = None
 
 def message(msg: str):
@@ -227,6 +228,8 @@ def change_nickname(initial: bool = False):
 def initial_nickname_check():
     if player_parameters['Name'] == '':
         change_nickname(True)
+
+################################################################# Connecting to and hosting games
 
 def host_game(game: Literal['Poker', 'Durak']):
     def disconnect_player(conn: socket.socket, left: bool = False):
@@ -313,7 +316,7 @@ def host_game(game: Literal['Poker', 'Durak']):
     if Window.quit:                                             # if quit app
         return
 
-    if t_is_closed:                                       # "Close" button pressed
+    if t_is_closed:                                             # "Close" button pressed
         close_lobby()
         return
 
@@ -416,7 +419,7 @@ def join_game():
     if Window.quit:
         return
 
-    if t_left_lobby:                                      # disconnected
+    if t_left_lobby:                                            # disconnected
         switch_windows(win_menu, win_middle, sheet_connect)
         message('Game closed')
         join_game()
@@ -445,31 +448,153 @@ def join_game():
     pass
     #TODO: further depends on result
 
+################################################################# Games sections
+def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] = None, this_p_name: str = None):
+    def print_message(name: str, args: str):
+        n_lines = chat.add_line(args                            # System message
+            if name == None
+            else f'#GREEN#{name}##: {args}')
+        #TODO: append chat size for recieved amount of lines
+
+    def move_to_queue(event: MyEvent, *, sock: socket.socket = None, queue: EventQueue = None):
+        sendobj(sock, event) if queue == None else queue.push(event)
+
+    def send_msg(*, queue: EventQueue = None):
+        def _target():
+            move_to_queue(MyEvent(10, this_p_name, text),
+                sock=sock, queue=queue)
+
+        text = entry_20_chatmsg.get().strip()
+        entry_20_chatmsg.delete(0, tk.END)
+
+        thr.Thread(target=_target).start()
+
+    def show_table_cards():
+        [card.grid(33, 33 + 9*i) for i, card in enumerate(table_cards)]
+
+    def hide_table_cards():
+        [card.hide() for card in table_cards]
+
+    def disconnect():
+        pass
+
+    # :queue: parameter is needed for saving practically identical
+    # code for hosting player
+    def player_action(name: str, args: list[str], queue: EventQueue = None):
+        def show_buttons(options: list[str]):
+            '''options: list of ACTIONS_-constants'''
+            for option in options:
+                game_buttons_table[option].grid()
+
+            for option in ACTIONS_CHECK, ACTIONS_BET, ACTIONS_FOLD:
+                game_buttons_table[option]['state'] = 'normal'
+
+        def hide_buttons():
+            '''options: list of ACTIONS_-constants'''
+            for option in _nonmain_options:
+                game_buttons_table[option].grid_remove()
+
+            for option in ACTIONS_CHECK, ACTIONS_BET, ACTIONS_FOLD:
+                game_buttons_table[option]['state'] = 'disabled'
+
+        pass
+
+    event_queue = EventQueue() if connections != None else None
+    chat = CanvasChat((8, 8), canvas_20_chat, Params.font_super_low, Params.color_gold, 260)
+    table_cards: list[Card] = []
+
+    game_buttons_table = {
+        ACTIONS_CHECK       : button_20_check,
+        ACTIONS_CALL        : button_20_call,
+        ACTIONS_SHOW        : button_20_show,
+
+        ACTIONS_BET         : button_20_bet,
+        ACTIONS_RAISE       : button_20_raise,
+
+        ACTIONS_FOLD        : button_20_fold,
+        ACTIONS_MUCK        : button_20_muck,
+
+        ACTIONS_QUIT        : button_20_quit,
+    }
+
+    _nonmain_options = [ACTIONS_CALL, ACTIONS_MUCK,
+        ACTIONS_QUIT, ACTIONS_RAISE, ACTIONS_SHOW]
+
+    for option in game_buttons_table:
+        if option in [ACTIONS_BET, ACTIONS_RAISE]:
+            continue
+
+        game_buttons_table[option]['command'] = (lambda:
+            move_to_queue(MyEvent(MyEvent.codes[option],
+                this_p_name),
+            sock=sock, queue=event_queue))
+
+    button_20_send.configure(command=lambda: send_msg(queue=event_queue))
+
+    # for the sake of different scopes
+    def as_player():
+        names_with_positions: list[tuple[int, str]] = recvobj(sock)
+
+        for i, player in names_with_positions:
+            lst_20_players_nicknames[i].configure(text=f'-> {player}')
+            lst_20_players_nicknames[i].grid(CNF_LABEL_G,
+                row = 5*(i + 1), column=112, columnspan=20)
+
+        switch_windows(win_menu, win_game, sheet_poker)
+
+        t_game_finished, t_player_quit = Trigger(), Trigger()
+
+        while not (t_game_finished or t_player_quit or Window.quit):
+
+            t.sleep(0.001)
+            data: Union[MyEvent, GameCode, socket.socket] = recvobj(sock)
+
+            if isinstance(data, MyEvent):
+                if data.name == this_p_name:
+                    pass
+                pass
+
+            elif isinstance(data, GameCode):
+                pass
+
+            else:
+                pass
+
+            win_game.win.update()
+
+        if Window.quit:
+            return
+
+        if t_player_quit:
+            switch_windows(win_game, win_menu, sheet_main_menu)
+            return
+
+        pass
+
+    def as_host():
+        pass
+
+    as_host() if connections != None else as_player()
 
 
 def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] = ..., this_p_name: str = ...):
     def print_message(name: str, args: tuple):
-        if name == None: # message by system
-            chat.add_line(args)
-            pass
-        else:
-            chat.add_line('{GREEN}' + name + '{}: ' + args)
-            pass
 
-        pass#DO increase chat size if needed
+        additional_lines = chat.add_line(args                   # System message
+            if name == None
+            else f'#GREEN#{name}##: {args}')
 
+        pass #DO increase chat size if needed
 
-    def send_msg(player=False, *, queue: MyPrimitiveEventQueue = None):
-        def _player():
-            sendobj(sock, MyEvent(10, this_p_name, text))
-
-        def _server():
-            queue.push(MyEvent(10, this_p_name, text))
-
-        text = entry_20_chatmsg.get()
+    def send_msg(player = False, *, queue: EventQueue = None):
+        text = entry_20_chatmsg.get().strip()
         entry_20_chatmsg.delete(0, tk.END)
 
-        thr.Thread(target=[_server, _player][player]).start()
+        thr.Thread(target=(lambda:
+            sendobj(sock, MyEvent(10, this_p_name, text))
+            if player
+            else queue.push(MyEvent(10, this_p_name, text)))
+            ).start()
 
     def show_table_cards(cards: list[Card]):
         pass
@@ -479,21 +604,69 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
             pass
         pass
 
-    def player_action(name: str, args: tuple):
-        if name == this_p_name:
+    game_buttons_table = {
+        ACTIONS_BET         : button_20_bet,
+        ACTIONS_CALL        : button_20_call,
+        ACTIONS_CHECK       : button_20_check,
+        ACTIONS_FOLD        : button_20_fold,
+        ACTIONS_MUCK        : button_20_muck,
+        ACTIONS_QUIT        : button_20_quit,
+        ACTIONS_RAISE       : button_20_raise,
+        ACTIONS_SHOW        : button_20_show,
+    }
+
+    class player_action:
+        @staticmethod
+        def show_slider(min_: int, max_: int):
             pass
+
+        for option in game_buttons_table:
+            game_buttons_table[option].configure
+
+        @staticmethod
+        def hide_buttons():
+            [game_buttons_table[option].grid_remove()
+                for option in game_buttons_table
+                    if option not in (ACTIONS_CHECK, ACTIONS_BET, ACTIONS_FOLD)]
+
+            for option in ACTIONS_CHECK, ACTIONS_BET, ACTIONS_FOLD:
+                game_buttons_table[option]['state'] = 'disabled'
+
+        @staticmethod
+        def act(name: str, args: list[str]):                    # main method
+            if name == this_p_name:
+                for option in args:
+                    game_buttons_table[option].grid()
+                    game_buttons_table[option]['state'] = 'normal'
+            pass
+
         pass
+
+
+
 
     chat = CanvasChat((8, 8), canvas_20_chat, Params.font_super_low, Params.color_gold, 260)
 
     player_actions = {
         -1      : disconnect_player,
         0       : print_message,
-        **{i    : player_action for i in range(1, 9)},
+        **{i    : player_action.act for i in range(1, 9)},
         10      : print_message
     }
 
     def _player(sock: socket.socket, this_p_name: str):
+        for action in game_buttons_table:
+            if action in [ACTIONS_BET, ACTIONS_RAISE]:
+                game_buttons_table[action].configure(command=
+                lambda: ...) #TODO:
+                continue
+
+            game_buttons_table[action].configure(command=
+                lambda: sendobj(sock, action))
+
+
+
+
         button_20_send.configure(command=lambda: send_msg(True))
         names_with_positions: list[tuple[int, str]] = recvobj(sock)
 
@@ -535,11 +708,11 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
 
 
 
-    # [Card(win_game, (ORDER[8 + i], DIAMOND), small=True).grid(row=33, column=33 + 9*i) for i in range(5)]
+
 
     def _server(sock: socket.socket, connections: dict[socket.socket, str], this_p_name: str):
         button_20_send.configure(command=lambda: send_msg(queue=event_queue))
-        event_queue = MyPrimitiveEventQueue()
+        event_queue = EventQueue()
 
         connections_lst, player_lst = [list(a) for a in zip(*connections.items())]
         shuffle(player_lst)
@@ -572,7 +745,7 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
                     event_queue.push(data)
                 elif isinstance(data, GameCode):                # for codes receivement support
                     pass
-                elif isinstance(data, socket.socket):           # socket broke, disconnect player after buffering "quit" action for him
+                elif isinstance(data, socket.socket):           # player's socket broke, disconnect player after buffering "quit" action for him
                     pass
 
             event = event_queue.pop()
@@ -601,6 +774,9 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
 
 
 
+
+
+################################################################# Start of the game
 
 # win_menu.show(sheet_main_menu)
 # initial_nickname_check()
