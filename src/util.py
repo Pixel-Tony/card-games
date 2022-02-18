@@ -110,7 +110,7 @@ def get_ip() -> str:
         ip = socket.gethostbyname(socket.gethostname())
     return ip
 
-@__arg_on_error(True)
+@__arg_on_error(0)
 def recvobj(sock_where: socket.socket):
     '''Receive an object from `sock_where`\n\n return None on success'''
     objlen = sock_where.recv(HEADLEN).decode()
@@ -125,7 +125,7 @@ def recvobj(sock_where: socket.socket):
     # return a
     return pickle.loads(res)
 
-@__arg_on_error(True)
+@__arg_on_error(0)
 def sendobj(sock_where: socket.socket, obj):
     '''Send object `obj` to `sock_where`\n\nreturn None on success'''
     # print('sent', obj)
@@ -247,7 +247,7 @@ def share_the_pot(pot, *players: 'PokerPlayer') -> int:
 # # # # # # # # # # # # # # # # # # | MAIN | # # # # # # # # # # # # # # # # # #
 IP, PORT = get_ip(), 50240
 DIR = '\\'.join(__file__.split('\\')[:-2])
-TITLE = 'Tony\'s Card Games Catalogue'
+TITLE = "Tony\'s Card Games Catalogue"
 DIMS = {
     'menu': (500, 600),
     'middle': (500, 130),
@@ -370,8 +370,7 @@ def smartify_entry(entry: tk.Entry):
             start = entry.index(tk.SEL_FIRST)
             end = entry.index(tk.SEL_LAST)
         else:
-            start = entry.index(tk.INSERT)
-            end = entry.index(tk.INSERT)
+            start = end = entry.index(tk.INSERT)
 
         entry.delete(start, end)
 
@@ -415,7 +414,15 @@ class CanvasChat:
         self.fill = fill
 
     def add_line(self, line: str):
-        num_lines = 1
+        def add_char(char):
+            nonlocal x, y
+            if self.font.measure(char) + x + 1 > self.MAX_LINE_LEN:
+                x = self.x
+                y += self.LETTER_HEIGHT + 2
+
+            self.canv.create_text(x, y, text=char, anchor='nw', justify='left', font=self.font, fill=color)
+            x += self.font.measure(char) + 1
+
         colors = {
             'BLUE'      : '#55F',
             'RED'       : '#F55',
@@ -424,45 +431,30 @@ class CanvasChat:
             'GREEN'     : '#1F1',
             ''          : self.fill
         }
-
         x, y = self.x, self.y
         color = self.fill
 
-        while line:                                             #cycle thru all the line chars
-            char = line[0]
-            line = line[1:]
-
+        while line:
+            char, *line = line
             if char == '#':
                 while char[-1] != '#' or len(char) == 1:
                     char += line[0]
                     line = line[1:]
-                col = char[1:-1]                                # trim brackets
-                if col in colors:                               #DO possibilities for other tags
-                    color = colors[col]
+                if char[1: -1] in colors:                       #DO possibilities for other tags
+                    color = colors[char[1: -1]]
                 else:
-                    while col:
-                        char = col[0]
-                        col = col[1:]
-                        if self.font.measure(char) + x + 1 > self.MAX_LINE_LEN:
-                            x = self.x
-                            y += self.LETTER_HEIGHT + 2
-                            num_lines += 1
-
-                        self.canv.create_text(x, y, text=char, anchor='nw', justify='left', font=self.font, fill=color)
-                        x += self.font.measure(char) + 1
+                    [add_char(ch) for ch in char]
                 continue
 
+            add_char(char)
 
-            if self.font.measure(char) + x + 1 > self.MAX_LINE_LEN:
-                x = self.x
-                y += self.LETTER_HEIGHT + 2
-                num_lines += 1
+        self.y = y + self.LETTER_HEIGHT + 2
 
-            self.canv.create_text(x, y, text=char, anchor='nw', justify='left', font=self.font, fill=color)
-            x += self.font.measure(char) + 1
+        scrollregion = [int(a) for a in self.canv['scrollregion'].split(' ')]
+        while scrollregion[3] - self.y < self.LETTER_HEIGHT + 2:
+            scrollregion[3] += self.LETTER_HEIGHT + 2
 
-        self.y = y + self.LETTER_HEIGHT + 5
-        return num_lines
+        self.canv.configure(scrollregion=scrollregion)
 
 class Card:
     def __init__(self, master: 'Window', card_value: tuple[Union[int, str], str], shirt_up: bool = False, small: bool = False) -> None:
@@ -665,6 +657,11 @@ class PokerTable:
 
     def set_default(self): [p.set_default for p in self.players]
 
+
+
+
+
+
     #TODO: redo at all, send messages to players with args
     # as player options, except conns which can't be sent
     # as pickled objects
@@ -702,9 +699,6 @@ class PokerTable:
                 pass
             else:       ## ACTIONS_QUIT
                 pass
-
-            return ...
-
 
 
         def check_the_bets(bet: int):

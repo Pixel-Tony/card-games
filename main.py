@@ -136,13 +136,18 @@ label_20_table = tk.Label(win_game.win, image=WImage(win_game, DIR + r'\gfx\misc
 label_20_players = tk.Label(win_game.win, text='Players', bg=Params.color_dark_blue, font=Params.font_head, fg=Params.color_white)
 label_20_line = tk.Label(win_game.win, bg=Params.color_white)
 label_20_chat = tk.Label(win_game.win, text='Chat', bg=Params.color_dark_blue, font=Params.font_head, fg=Params.color_white)
-canvas_20_chat = tk.Canvas(win_game.win, bg=Params.color_black, highlightcolor=Params.color_gold)
+
+canvas_20_chat = tk.Canvas(win_game.win, bg=Params.color_black, highlightcolor=Params.color_gold, scrollregion=(0, 0, 230, 300))
+_scrollbar_20_chat = tk.Scrollbar(win_game.win, orient='vertical', command=canvas_20_chat.yview)
+canvas_20_chat.configure(width=230, height=300, yscrollcommand=_scrollbar_20_chat.set)
+
 entry_20_chatmsg = smartify_entry(tk.Entry(win_game.win, bg=Params.color_grey, fg=Params.color_black, font=Params.font_super_low)) #TODO: params
 button_20_send = tk.Button(win_game.win) #TODO: image
 
 button_20_send.grid(CNF_LABEL_G, row=84, column=134, columnspan=4)
 entry_20_chatmsg.grid(CNF_LABEL_G, row=84, column=112, columnspan=21)
-canvas_20_chat.grid(CNF_IMAGE_G, row=53, column=112, rowspan=30, columnspan=26)
+canvas_20_chat.grid(CNF_IMAGE_G, row=53, column=112, rowspan=30, columnspan=23)
+_scrollbar_20_chat.grid(row=53, column=135, rowspan=30, columnspan=3, sticky='NEWS')
 
 lst_20_players_nicknames = [
     tk.Label(win_game.win, text='', font=Params.font_players, anchor='w',
@@ -193,6 +198,7 @@ win_game.enable_debug()
 
 _message_id = None
 
+################################################################# Facility
 def message(msg: str):
     global _message_id
     if label_1_message['text'] != '':
@@ -218,10 +224,8 @@ def change_nickname(initial: bool = False):
     entry_11_nickname.insert(0, player_parameters['Name'])
     button_11_save.configure(command=confirm, state='disabled' if initial else 'normal')
 
-    button_11_back.configure(
-        command=Window.quit_window
-        if initial else
-        lambda: switch_windows(win_middle, win_menu, sheet_main_menu))
+    button_11_back.configure(command=
+        Window.quit_window if initial else lambda: switch_windows(win_middle, win_menu, sheet_main_menu))
 
     switch_windows(win_menu, win_middle, sheet_nickname)
 
@@ -452,17 +456,11 @@ def join_game():
 def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] = None, this_p_name: str = None):
     def print_message(name: str, args: str):
         '''print message to the game chat'''
-        n_lines = chat.add_line(args
-            if name == None                                     # System message
-            else f'#GREEN#{name}##: {args}')
-        #TODO: append chat size for recieved amount of lines
+        chat.add_line(args if name == None else f'#GREEN#{name}##: {args}')
 
-    def move_to_queue(event: MyEvent, *,
-        sock: socket.socket = ..., queue: EventQueue = None, tag = Q_ALL):
+    def move_to_queue(event: MyEvent, *, sock: socket.socket = ...,
+                      queue: EventQueue = None, tag = Q_ALL):
         sendobj(sock, event) if queue == None else queue.push(event, tag)
-
-
-
 
     def send_msg():
         def _target():
@@ -505,7 +503,7 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
         pass
 
     event_queue = EventQueue() if connections != None else None
-    chat = CanvasChat((8, 8), canvas_20_chat, Params.font_super_low, Params.color_gold, 260)
+    chat = CanvasChat((8, 8), canvas_20_chat, Params.font_super_low, Params.color_gold, 230)
     table_cards: list[Card] = []
 
     game_buttons_table = {
