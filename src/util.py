@@ -1,6 +1,6 @@
 from functools import reduce
 from itertools import combinations as iter_combs
-from typing import Literal, Union, Any
+from typing import Literal, Union
 from random import shuffle, choice
 import urllib.request, urllib.error
 import tkinter as tk
@@ -52,6 +52,9 @@ __all__ = [
     'ACTIONS_MUCK',
     'ACTIONS_QUIT',
 
+    'Q_ALL',
+    'Q_GAME',
+
     # modules
     'socket',
     'tk',
@@ -80,7 +83,6 @@ __all__ = [
     # classes
     'Literal',
     'Union',
-    'Any',
 
     'PokerCombination',
     'Params',
@@ -108,7 +110,7 @@ def get_ip() -> str:
         ip = socket.gethostbyname(socket.gethostname())
     return ip
 
-@exception_proof_ish(True)
+@__arg_on_error(True)
 def recvobj(sock_where: socket.socket):
     '''Receive an object from `sock_where`\n\n return None on success'''
     objlen = sock_where.recv(HEADLEN).decode()
@@ -123,7 +125,7 @@ def recvobj(sock_where: socket.socket):
     # return a
     return pickle.loads(res)
 
-@exception_proof_ish(True)
+@__arg_on_error(True)
 def sendobj(sock_where: socket.socket, obj):
     '''Send object `obj` to `sock_where`\n\nreturn None on success'''
     # print('sent', obj)
@@ -614,8 +616,12 @@ class EventQueue:
         return _
 
     @__lock_control
-    def push(self, event: 'MyEvent'):
+    def push(self, event: 'MyEvent', tag = Q_ALL):
         self.queue.append(event)
+
+    @__lock_control
+    def extend(self, tag = Q_ALL, *events: 'MyEvent'):
+        self.queue.extend(events)
 
     @__lock_control
     def pop(self, tag=None):
@@ -630,10 +636,12 @@ class EventQueue:
             if elem.tag == tag:
                 return self.queue.pop(i)[1]
 
+# FUTURE: allow multiple equal names
+# by adding unique id parameter
+# (possibly str(name) + str(address) idk)
 class PokerPlayer:
-    def __init__(self, name: str, sit: int, conn: socket.socket, master: Window):
+    def __init__(self, name: str, sit: int, master: Window):
         self.name = name
-        self.conn = conn
         self.sit = sit
         self.sprites = sprites(master, sit)
         self.current_bet = 0
@@ -646,15 +654,20 @@ class PokerPlayer:
         self.bankroll = 1000
         self.cards = []
 
-#TODO: redo at all, send messages to players with args
-# as player options, except conns which can't be sent
-# as pickled objects
+    def get_stats(self):
+        return {
+            'bankroll' : self.bankroll,
+        }
+
 class PokerTable:
     def __init__(self, *players: PokerPlayer, event_manager) -> None:
         self.players = players
 
     def set_default(self): [p.set_default for p in self.players]
 
+    #TODO: redo at all, send messages to players with args
+    # as player options, except conns which can't be sent
+    # as pickled objects
     def party(self, small_blind, game_type, queue: EventQueue):
         def get_options(p: 'PokerPlayer', bet=0):
             p.did_move = True

@@ -8,12 +8,25 @@ SUITS = [SPADE, HEART, CLUB, DIAMOND]
 ORDER = [*range(2, 11), *'JQKA'] # 2-3-4-5-6-7-8-9-10-J-K-Q-A
 DECK = [(index, suit) for suit in SUITS for index in ORDER]
 
+# literal consts
+Q_ALL = 'ALL'
+Q_GAME = 'GAME'
+
+
+ACTIONS_CHECK = 'Check'
+ACTIONS_BET = 'Bet'
+ACTIONS_RAISE = 'Raise'
+ACTIONS_CALL = 'Call'
+ACTIONS_FOLD = 'Fold'
+ACTIONS_SHOW = 'Show'
+ACTIONS_MUCK = 'Muck'
+ACTIONS_QUIT = 'Quit'
 
 def check_ip_mask(ip: str):
     ip = ip.split('.')
     return not ((len(ip) != 4) or any(not (arg.isdigit() and not (arg.startswith('0') and len(arg) > 1) and 0 <= int(arg) < 256) for arg in ip))
 
-def exception_proof_ish(return_arg=False):
+def __arg_on_error(return_arg=False):
     def wrap(func):
         def _(*args):
             try:
@@ -91,16 +104,6 @@ CNF_LABEL_G = {'rowspan' : 4, 'sticky' : 'NEWS'}
 CNF_IMAGE_G = {'sticky' : 'NEWS'}
 CNF_GAME_BUTTON_G = {'rowspan' : 6, 'columnspan' : 9, 'sticky' : 'NEWS'}
 
-
-ACTIONS_CHECK = 'Check'
-ACTIONS_BET = 'Bet'
-ACTIONS_RAISE = 'Raise'
-ACTIONS_CALL = 'Call'
-ACTIONS_FOLD = 'Fold'
-ACTIONS_SHOW = 'Show'
-ACTIONS_MUCK = 'Muck'
-ACTIONS_QUIT = 'Quit'
-
 __all__ = [
     # constants
     'HEADLEN',
@@ -120,6 +123,9 @@ __all__ = [
     'ACTIONS_MUCK',
     'ACTIONS_QUIT',
 
+    'Q_ALL',
+    'Q_GAME',
+
     'SUITS',
     'SPADE',
     'HEART',
@@ -137,7 +143,7 @@ __all__ = [
     'SOCKET_TIMEOUT',
 
     # functions
-    'exception_proof_ish',
+    '__arg_on_error',
     'check_ip_mask',
     'end_join',
 
