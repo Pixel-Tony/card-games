@@ -433,10 +433,10 @@ class CanvasChat:
             line = line[1:]
 
             if char == '#':
-                while char[-1] != '#':
+                while char[-1] != '#' or len(char) == 1:
                     char += line[0]
                     line = line[1:]
-                col = char[1:][:-1]                             # trim brackets
+                col = char[1:-1]                                # trim brackets
                 if col in colors:                               #DO possibilities for other tags
                     color = colors[col]
                 else:
@@ -606,7 +606,7 @@ class EventQueue:
     def __init__(self, pause_s: float = 1/350) -> None:
         self.dt = pause_s
         self.lock = self.Lock()
-        self.queue: list[MyEvent] = []
+        self.queue: list[tuple[str, MyEvent]] = []
 
     def __lock_control(func):
         def _(self: 'EventQueue', *args):
@@ -617,23 +617,23 @@ class EventQueue:
 
     @__lock_control
     def push(self, event: 'MyEvent', tag = Q_ALL):
-        self.queue.append(event)
+        self.queue.append((tag, event))
 
     @__lock_control
     def extend(self, tag = Q_ALL, *events: 'MyEvent'):
-        self.queue.extend(events)
+        [self.queue.append((tag, ev)) for ev in events]
 
     @__lock_control
-    def pop(self, tag=None):
+    def pop(self, tag=Q_ALL):
         '''Return None if no value with tag was found'''
-
         if not len(self.queue):
             return
-        if tag == None:
-            return self.queue.pop(0)
+
+        if tag == Q_ALL:
+            return self.queue.pop(0)[1]
 
         for i, elem in enumerate(self.queue):
-            if elem.tag == tag:
+            if elem[0] == tag:
                 return self.queue.pop(i)[1]
 
 # FUTURE: allow multiple equal names
