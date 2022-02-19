@@ -62,6 +62,8 @@ __all__ = [
 
     'Q_ALL',
     'Q_GAME',
+    'Q_NONGAME',
+    'Q_PERSONAL',
 
     # modules
     'socket',
@@ -556,6 +558,34 @@ class sprites:
 
 class Event:
     '''Codes:
+    ```
+    | Shutdown      -5 | Disconnect    -1 |
+    | Action ask     0 | Player action  1 |
+    | Chat message   5 | Info          10 |
+    '''
+    codes = {
+        'Shutdown'      : -5,
+        'Disconnect'    : -1,
+        'Action ask'    :  0,
+        'Player action' :  1,
+        'Chat message'  :  5,
+        'Info'          : 10,
+    }
+
+    [ACTIONS_CHECK, ACTIONS_CALL, ACTIONS_BET, ACTIONS_RAISE,
+    ACTIONS_FOLD, ACTIONS_QUIT, ACTIONS_MUCK, ACTIONS_SHOW]
+
+    def __init__(self, code: int, data, *, private_for: socket.socket = ...):
+        self.code = code
+        self.data = data
+        if private_for != ...:
+            self.receiver = private_for
+
+
+
+
+class Event:
+    '''Codes:
     ```| Shutdown      -5 | Timeout       -2 |
     | Disconnect    -1 | Act            0 |
     | Check          1 | Call           2 |
@@ -564,6 +594,7 @@ class Event:
     | Muck           7 | Show           8 |
     | Chat message  10 | Continue?     11 |
     | Game finished 12 | Game goes on  13 |
+    | Facility      20 |
     '''
     # Server - game finished
     # Server - game continues
@@ -615,32 +646,35 @@ class EventQueue:
             self.q.append((tag, ev))
 
     @__lock_control
-    def pop(self, tag=Q_ALL):
+    def pop(self, tag=Q_ALL) -> Union[tuple[str, Event], None]:
         '''Return None if no value with tag was found'''
-        def search(elem):
+        def search(tags, exclude_tags):
             try:
                 n = 0
                 while n < len(self.q):
                     item = self.q[0]
-                    if item[0] == elem:
-                        return self.q.popleft()[1]
+                    if item[0] in tags and item[0] not in exclude_tags:
+                        return self.q.popleft()
                     self.q.rotate(1)
                     n += 1
             finally:
                 if n not in [0, len(self.q)]:
                     self.q.rotate(1 - n)
 
-        if not len(self.q) or tag not in [*zip(*self.q)][0]:
+        if not len(self.q) or (tag not in [*zip(*self.q)][0] and tag != Q_NONGAME):
             return
 
         if tag == Q_ALL:
-            return self.q.popleft()[1]
+            return self.q.popleft()
+
+        if tag == Q_NONGAME:
+            return search()
 
         return search(tag)
 
 class PokerPlayer:
-    def __init__(self, name: str, sit: int, conn: socket.socket, master: Window):
-        self.name, self.sit, self.conn = name, sit, conn
+    def __init__(self, name: str, sit: int, master: Window):
+        self.name, self.sit = name, sit
         self.sprites = sprites(master, sit)
         self.current_bet = 0
         self.did_move = False
@@ -656,9 +690,9 @@ class PokerPlayer:
         self.current_bet = min(bet, self.bankroll)
         line = f'#GREEN#{self.name}##'
         if self.current_bet == self.bankroll:
-            line += f" goes all-in ({self.bankroll}$)"
+            line += f" goes all-in #YELLOW#({self.current_bet}##$)"
         else:
-            line += f" bets {self.bankroll}$"
+            line += f" bets #YELLOW#{self.current_bet}##$"
         if sb or bb:
             line += f" as a {['small', 'big'][bb]} blind"
 
@@ -732,26 +766,29 @@ class PokerTable:
         table_cards = deal_cards(sits, game_type)
         self.set_default()
 
-        for p in self.players:
+        for i, p in enumerate(self.players):
             [p.cards.append(table_cards.pop(0)) for i in range(1 + game_type*2)]
+            self.q.push(Event(20, p.name, {'Cards' : p.cards, 'sit' : i}), Q_PERSONAL)
+
+        # self.q.push(Event(20, None, {'Table cards' : table_cards}))
 
         while game_state < 4 and len(active_players()) > 1:
             bet = 0
-            self.q.push(Event(20, None, table_cards[:bool(game_state) * (game_state + 2)]))
+            self.q.push(Event(20, None, {'Table cards' : table_cards[:bool(game_state) * (game_state + 2)]}))
 
             if game_state == 0:
                 _blinds = [
                     self.alive_players()[(dealer_place + 1) % 2].bet(small_blind, sb=True),
                     self.alive_players()[(dealer_place + 2) % 2].bet(small_blind*2, bb=True)
                 ]
-                self.q.extend(Q_ALL, map(lambda b: Event(3, b), _blinds))
+                self.q.extend(Q_ALL, *map(lambda b: Event(3, None, b), _blinds))
                 bet = max([a.current_bet for a in self.players])
                 counter = (dealer_place + 3) % sits
 
             while (counter < sits or not check_the_bets(bet)) and len(active_players()) > 1:
                 p_current = active_players()[counter % sits]
-                self.q.push(Event(0, p_current.name, get_options(p_current, bet)))
-
+                self.q.push(Event(0, p_current.name, {'options': get_options(p_current, bet)}))
+                self.wait(Q_GAME)
                 bet = max(bet, p_current.current_bet)
                 counter += 1
 
@@ -826,7 +863,7 @@ class PokerTable:
 # by adding unique id parameter
 # (possibly str(name) + str(address) idk)
 
-class PokerTable:
+class _PokerTable:
     def __init__(self, *players: PokerPlayer) -> None:
         self.players = players
 
