@@ -1,5 +1,4 @@
 from src.util import *
-import threading as thr
 import select
 
 ##### First window - main menu
@@ -287,7 +286,7 @@ def host_game(game: Literal['Poker', 'Durak']):
                     sendobj(player, CODE_SERVER_FULL)
                     player.close()
                     continue
-                # player.setblocking(0)
+                player.settimeout(SOCKET_TIMEOUT)
                 readers.append(player)
                 continue
 
@@ -458,13 +457,13 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
         '''print message to the game chat'''
         chat.add_line(args if name == None else f'#GREEN#{name}##: {args}')
 
-    def move_to_queue(event: MyEvent, *, sock: socket.socket = ...,
+    def move_to_queue(event: Event, *, sock: socket.socket = ...,
                       queue: EventQueue = None, tag = Q_ALL):
         sendobj(sock, event) if queue == None else queue.push(event, tag)
 
     def send_msg():
         def _target():
-            move_to_queue(MyEvent(10, this_p_name, text),
+            move_to_queue(Event(10, this_p_name, text),
                 sock=sock, queue=event_queue)                   # (queue == None) -> (== sendobj(...))
 
         button_20_send.configure(relief='raised')               # constant presses make it become sunken, why - nobody knows
@@ -483,7 +482,14 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
     def disconnect(name: str, args):
         pass
 
-    def player_action(name: str, args: list[str]):
+    def continuation_choice(name: str, args):
+        if connections == None:
+            print_message(name, args)
+            return
+        pass
+
+
+    def player_action(name: str, args: dict[Literal['txt', 'bet'], Union[str, int]]):
         def show_buttons(options: list[str]):
             '''options: list of ACTIONS_-constants'''
             for option in options:
@@ -499,6 +505,9 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
 
             for option in ACTIONS_CHECK, ACTIONS_BET, ACTIONS_FOLD:
                 game_buttons_table[option]['state'] = 'disabled'
+
+        if name != this_p_name:
+            print_message(name)
 
         pass
 
@@ -525,6 +534,7 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
         0               : print_message,
        **{i             : player_action for i in range(1, 9)},
         10              : print_message,
+        11              : continuation_choice,
     }
 
 
@@ -536,7 +546,7 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
             continue #TODO: bind these
 
         game_buttons_table[option].configure(command = lambda:
-            move_to_queue(MyEvent(MyEvent.codes[option], this_p_name),
+            move_to_queue(Event(Event.codes[option], this_p_name),
                 sock=sock, queue=event_queue))
 
     button_20_send.configure(command=send_msg)
@@ -550,7 +560,7 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
             lst_20_players_nicknames[i].grid(CNF_LABEL_G,
                 row = 5*(i + 1), column=112, columnspan=20)
 
-            players.append(PokerPlayer(player, i, win_game))
+            players.append(PokerPlayer(player, i, 'dummy', win_game))
 
         switch_windows(win_menu, win_game, sheet_poker)
 
@@ -561,12 +571,12 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
             t.sleep(0.001)
             win_game.win.update()
 
-            data: Union[MyEvent, GameCode, socket.socket] = recvobj(sock)
+            data: Union[Event, GameCode, socket.socket] = recvobj(sock)
             if not data:
                 continue
 
-            if isinstance(data, MyEvent):
-                if data.code == MyEvent.codes['Shutdown']:
+            if isinstance(data, Event):
+                if data.code == Event.codes['Shutdown']:
                     t_aborted.toggle()
                     break
 
@@ -619,8 +629,11 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
 
         switch_windows(win_menu, win_game, sheet_poker)
 
-        t_game_finished = Trigger()
+        game = PokerTable([PokerPlayer(connections[conn], i, conn) for i, conn in player_lst])
+        thr.Thread(target=game.game, args=(button_02_omaha['bg'] == '#3e3',), daemon=True).start()
 
+
+        t_game_finished = Trigger()
         while not (t_game_finished or Window.quit):
             t.sleep(0.016)
             win_game.win.update()
@@ -633,7 +646,7 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
                 data = recvobj(conn)
                 if not data:
                     continue
-                if isinstance(data, MyEvent):
+                if isinstance(data, Event):
                     event_queue.push(data)
                 elif isinstance(data, GameCode):
                     pass
@@ -647,8 +660,9 @@ def poker_session(sock: socket.socket, *, connections: dict[socket.socket, str] 
             # TODO: check if player which action is called is
             # still connected, otherwise add quit event to his buffer
             for conn in connections_lst:
-                if conn == sock and event != None:
-                    event_code_to_action_table[event.code](event.name, event.args)
+                if conn == sock:
+                    if event != None:
+                        event_code_to_action_table[event.code](event.name, event.args)
                     pass
                     continue
 

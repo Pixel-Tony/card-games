@@ -1,16 +1,24 @@
+from src.helpers import *
+
 from functools import reduce
-from itertools import combinations as iter_combs
+from itertools import combinations as itertools_combs
 from typing import Literal, Union
 from random import shuffle, choice
-import urllib.request, urllib.error
+
+from urllib import request as urlreq
+from urllib.error import URLError as urlerr
+import os.path
+
 import tkinter as tk
 import tkinter.font as tkf
-import os.path
+import time as t
+
+import threading as thr
 import socket
 import pickle
+from collections import deque
+
 import json
-import time as t
-from src.helpers import *
 
 __all__ = [
     # constants
@@ -58,6 +66,8 @@ __all__ = [
     # modules
     'socket',
     'tk',
+    't',
+    'thr',
 
     # functions
     'smartify_entry',
@@ -78,7 +88,6 @@ __all__ = [
     # variables
     'game_parameters',
     'player_parameters',
-    't',
 
     # classes
     'Literal',
@@ -98,19 +107,19 @@ __all__ = [
     'PokerPlayer',
     'PokerTable',
 
-    'MyEvent',
+    'Event',
     'EventQueue',
 ]
 
 # # # # # # # # # # # # # # # # | SERVER | # # # # # # # # # # # # # # # #
 def get_ip() -> str:
     try:
-        ip = urllib.request.urlopen("https://ident.me", timeout=1).read().decode("utf8")
-    except urllib.error.URLError:
+        ip = urlreq.urlopen("https://ident.me", timeout=1.5).read().decode("utf8")
+    except urlerr:
         ip = socket.gethostbyname(socket.gethostname())
     return ip
 
-@__arg_on_error(0)
+@__arg_on_error(True)
 def recvobj(sock_where: socket.socket):
     '''Receive an object from `sock_where`\n\n return None on success'''
     objlen = sock_where.recv(HEADLEN).decode()
@@ -125,7 +134,7 @@ def recvobj(sock_where: socket.socket):
     # return a
     return pickle.loads(res)
 
-@__arg_on_error(0)
+@__arg_on_error(True)
 def sendobj(sock_where: socket.socket, obj):
     '''Send object `obj` to `sock_where`\n\nreturn None on success'''
     # print('sent', obj)
@@ -233,7 +242,7 @@ def poker_combination(player_cards: list['Card'], table_cards: list['Card'], gam
     if not len(table_cards):
         return compare_combinations([holdem_combination([player_cards[i] for i in p_var]) for p_var in player_card_variants])
     result: list[PokerCombination] = []
-    table_card_variants = [*iter_combs(range(len(table_cards)), 3)]
+    table_card_variants = [*itertools_combs(range(len(table_cards)), 3)]
     for p_var in player_card_variants:
         for t_var in table_card_variants:
             result.append(holdem_combination([player_cards[i] for i in p_var] + [table_cards[j] for j in t_var]))
@@ -545,16 +554,16 @@ class sprites:
 
         self.master.win.after(time*1000, hide_cards)
 
-class MyEvent:
-    '''```
-    | Shutdown      -5 | Timeout       -2 |
+class Event:
+    '''Codes:
+    ```| Shutdown      -5 | Timeout       -2 |
     | Disconnect    -1 | Act            0 |
     | Check          1 | Call           2 |
     | Bet            3 | Raise          4 |
     | Fold           5 | Quit           6 |
     | Muck           7 | Show           8 |
-    | Chat message  10 | Game finished 12 |
-    | Game goes on  13 |
+    | Chat message  10 | Continue?     11 |
+    | Game finished 12 | Game goes on  13 |
     '''
     # Server - game finished
     # Server - game continues
@@ -571,7 +580,8 @@ class MyEvent:
         ACTIONS_QUIT        :  6,
         ACTIONS_MUCK        :  7,
         ACTIONS_SHOW        :  8,
-        'Chat message'      : 10,                               # player
+        'Chat message'      : 10,
+        'Facility'          : 20,
     }
 
     def __init__(self, code, name, args = None):
@@ -583,22 +593,10 @@ class MyEvent:
         return f'<{self.__class__.__name__}, code={self.code}, name={self.name}, args={self.args}>'
 
 class EventQueue:
-    class Lock:
-        def __init__(self):
-            self.lock = False
-
-        def __enter__(self):
-            while self.lock:
-                continue
-            self.lock = True
-
-        def __exit__(self, *err_args):
-            self.lock = False
-
     def __init__(self, pause_s: float = 1/350) -> None:
         self.dt = pause_s
-        self.lock = self.Lock()
-        self.queue: list[tuple[str, MyEvent]] = []
+        self.lock = thr.Lock()
+        self.q: deque[tuple[str, Event]] = deque()
 
     def __lock_control(func):
         def _(self: 'EventQueue', *args):
@@ -608,55 +606,231 @@ class EventQueue:
         return _
 
     @__lock_control
-    def push(self, event: 'MyEvent', tag = Q_ALL):
-        self.queue.append((tag, event))
+    def push(self, event: 'Event', tag = Q_ALL):
+        self.q.append((tag, event))
 
     @__lock_control
-    def extend(self, tag = Q_ALL, *events: 'MyEvent'):
-        [self.queue.append((tag, ev)) for ev in events]
+    def extend(self, tag = Q_ALL, *events: 'Event'):
+        for ev in events:
+            self.q.append((tag, ev))
 
     @__lock_control
     def pop(self, tag=Q_ALL):
         '''Return None if no value with tag was found'''
-        if not len(self.queue):
+        def search(elem):
+            try:
+                n = 0
+                while n < len(self.q):
+                    item = self.q[0]
+                    if item[0] == elem:
+                        return self.q.popleft()[1]
+                    self.q.rotate(1)
+                    n += 1
+            finally:
+                if n not in [0, len(self.q)]:
+                    self.q.rotate(1 - n)
+
+        if not len(self.q) or tag not in [*zip(*self.q)][0]:
             return
 
         if tag == Q_ALL:
-            return self.queue.pop(0)[1]
+            return self.q.popleft()[1]
 
-        for i, elem in enumerate(self.queue):
-            if elem[0] == tag:
-                return self.queue.pop(i)[1]
+        return search(tag)
 
-# FUTURE: allow multiple equal names
-# by adding unique id parameter
-# (possibly str(name) + str(address) idk)
 class PokerPlayer:
-    def __init__(self, name: str, sit: int, master: Window):
-        self.name = name
-        self.sit = sit
+    def __init__(self, name: str, sit: int, conn: socket.socket, master: Window):
+        self.name, self.sit, self.conn = name, sit, conn
         self.sprites = sprites(master, sit)
         self.current_bet = 0
         self.did_move = False
         self.is_dealer = False
+        self.bankroll = 1000
         self.set_default()
 
     def set_default(self):
-        self.is_out = False # player folded or quit
-        self.bankroll = 1000
+        self.is_out = False
         self.cards = []
 
-    def get_stats(self):
-        return {
-            'bankroll' : self.bankroll,
-        }
+    def bet(self, bet: int, *, sb=False, bb=False) -> str:
+        self.current_bet = min(bet, self.bankroll)
+        line = f'#GREEN#{self.name}##'
+        if self.current_bet == self.bankroll:
+            line += f" goes all-in ({self.bankroll}$)"
+        else:
+            line += f" bets {self.bankroll}$"
+        if sb or bb:
+            line += f" as a {['small', 'big'][bb]} blind"
+
+        return {'txt': line, 'bet': self.current_bet}
 
 class PokerTable:
-    def __init__(self, *players: PokerPlayer, event_manager) -> None:
+    def __init__(self, players: list[PokerPlayer], queue: EventQueue) -> None:
+        self.players = players
+        self.q = queue
+
+    def wait(self, tag) -> Event:
+        res: Event = None
+        def _():
+            nonlocal res
+            while not res:
+                res = self.q.pop(tag)
+        T = thr.Thread(target=_)
+        T.start()
+        T.join()
+        return res
+
+    def set_default(self): [p.set_default() for p in self.players]
+
+    def alive_players(self):
+        return [p for p in self.players if p.bankroll and not p.is_out]
+
+    def party(self, small_blind: int, game_type: bool):
+        def share_the_pot(*winners: PokerPlayer):
+            nonlocal pot
+            for p in winners:
+                p.bankroll += pot//len(winners)
+            pot = 0
+
+
+        def get_options(p: 'PokerPlayer', bet=0) -> list[str]:
+            if not p.bankroll or p.is_out:
+                return
+
+            p.did_move = True
+            options = []
+            if bet <= p.current_bet:
+                options.append(ACTIONS_CHECK)
+            else:
+                options.append(ACTIONS_CALL)
+
+            if bet == 0:
+                options.append(ACTIONS_BET)
+            elif p.bankroll > bet*2:
+                options.append(ACTIONS_RAISE)
+            options.extend([ACTIONS_FOLD, ACTIONS_QUIT])
+
+            return options
+
+        def p_action(p: PokerPlayer, action: str) -> None:
+            pass
+
+        def active_players():
+            return [p for p in self.players if not p.is_out]
+
+        def showdown_ask(p: PokerPlayer):
+            '''send cards, send two options, get result'''
+            pass
+
+        def check_the_bets(bet: int):
+            return all([p.did_move and (p.current_bet in [bet, p.bankroll] or p.is_out) for p in self.players])
+
+        sits = len(self.players)
+        game_state = 0
+        pot = 0
+        dealer_place = [a.sit for a in self.players if a.is_dealer][0]
+        table_cards = deal_cards(sits, game_type)
+        self.set_default()
+
+        for p in self.players:
+            [p.cards.append(table_cards.pop(0)) for i in range(1 + game_type*2)]
+
+        while game_state < 4 and len(active_players()) > 1:
+            bet = 0
+            self.q.push(Event(20, None, table_cards[:bool(game_state) * (game_state + 2)]))
+
+            if game_state == 0:
+                _blinds = [
+                    self.alive_players()[(dealer_place + 1) % 2].bet(small_blind, sb=True),
+                    self.alive_players()[(dealer_place + 2) % 2].bet(small_blind*2, bb=True)
+                ]
+                self.q.extend(Q_ALL, map(lambda b: Event(3, b), _blinds))
+                bet = max([a.current_bet for a in self.players])
+                counter = (dealer_place + 3) % sits
+
+            while (counter < sits or not check_the_bets(bet)) and len(active_players()) > 1:
+                p_current = active_players()[counter % sits]
+                self.q.push(Event(0, p_current.name, get_options(p_current, bet)))
+
+                bet = max(bet, p_current.current_bet)
+                counter += 1
+
+            for p in self.players:
+                p.did_move = False
+                if bet > 0:
+                    pot += p.current_bet
+                    p.bankroll -= p.current_bet
+                    p.current_bet = 0
+
+            game_state += 1
+
+
+        if len(active_players()) == 1:
+            _winner = active_players()[0]
+
+            self.q.push(Event(10, None, f'Player #GREEN#{_winner.name}## wins'))
+            share_the_pot(_winner)
+
+            pass
+            ...
+            return
+
+        finalists: Union[list[PokerPlayer], dict[PokerPlayer, PokerCombination]] = []
+        for p in active_players()[:-1]:
+            res = showdown_ask(p)
+            if res:
+                finalists.append(res)
+
+        if not len(finalists):
+            finalists.append(active_players()[:-1])
+
+        finalists_combs = {p : poker_combination(p.cards, table_cards, game_type) for p in finalists}
+        best_hand = compare_combinations(finalists_combs.values())
+
+        finalists = {p : finalists_combs[p] == best_hand for p in finalists if finalists_combs[p].hand == best_hand.hand}
+
+        if len([p for p in finalists if finalists[p]]) > 1:
+
+
+
+            # more than one player is winner, share the pot
+            pass
+        else:
+            # [p for p in finalists if finalists[p]][0] is winner
+            pass
+
+    def game(self, game_type, small_blind = 10):
+        self.q.push(Event(10, None, f'Game starts, small blind: #RED#{small_blind}##$'))
+        blind = small_blind
+        self.players[0].is_dealer = True
+        rounds = 0
+
+        while len(self.alive_players()) > 1:
+            if rounds == 5:
+                rounds = 0
+                blind *= 2
+                self.q.push(Event(10, None, f'small blind doubled, it\'s #RED#{blind}##$ now'))
+            self.party(blind, game_type)
+            rounds += 1
+
+        winner = self.alive_players()[0]
+        self.q.push(Event(10, None, f'Player {winner.name} is the winner of the game'))
+        t.sleep(2.5)
+        self.q.push(Event(11, None, f'Waiting for host...'))
+
+
+
+
+
+# FUTURE: allow multiple equal names
+# by adding unique id parameter
+# (possibly str(name) + str(address) idk)
+
+class PokerTable:
+    def __init__(self, *players: PokerPlayer) -> None:
         self.players = players
 
     def set_default(self): [p.set_default for p in self.players]
-
 
 
 
@@ -719,7 +893,7 @@ class PokerTable:
         game_type = (game_type == 'Omaha')
         game_state = 0
         current_pot = 0
-        dealer_place = [a.place for a in self.players if a.is_dealer][0]
+        dealer_place = [a.sit for a in self.players if a.is_dealer][0]
         table_cards = deal_cards(sits, game_type)
         self.set_default()
 

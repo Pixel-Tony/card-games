@@ -1,6 +1,6 @@
 # socket consts
 HEADLEN = 8
-SOCKET_TIMEOUT = 4
+SOCKET_TIMEOUT = 3
 
 # other consts
 SPADE, HEART, CLUB, DIAMOND = '♠♥♣♦'
@@ -11,7 +11,6 @@ DECK = [(index, suit) for suit in SUITS for index in ORDER]
 # literal consts
 Q_ALL = 'ALL'
 Q_GAME = 'GAME'
-
 
 ACTIONS_CHECK = 'Check'
 ACTIONS_BET = 'Bet'
