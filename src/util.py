@@ -15,6 +15,7 @@ import time as t
 
 import threading as thr
 import socket
+import socket
 import pickle
 from collections import deque
 
@@ -22,22 +23,13 @@ import json
 
 __all__ = [
     # constants
-    'SPADE',
-    'HEART',
-    'CLUB',
-    'DIAMOND',
-    'SUITS',
-    'ORDER',
-    'DECK',
+    'SPADE', 'HEART', 'CLUB', 'DIAMOND',
+    'SUITS', 'ORDER', 'DECK',
 
-    'IP',
-    'PORT',
+    'IP', 'PORT',
 
-    'DIR',
-    'TITLE',
-    'DIMS',
+    'DIR', 'TITLE',
 
-    'CODE_NAME_EXISTS',
     'CODE_SHUT_CONN',
     'CODE_SUCCESS',
     'CODE_DISCONNECT',
@@ -46,7 +38,7 @@ __all__ = [
     'CNF_MENU_BUTTON',
     'CNF_LABEL',
     'CNF_LABEL_G',
-    'CNF_IMAGE_G',
+    'CNF_IMG_G',
     'CNF_GAME_BUTTON_G',
 
     'SOCKET_TIMEOUT',
@@ -60,14 +52,10 @@ __all__ = [
     'ACTIONS_MUCK',
     'ACTIONS_QUIT',
 
-    'Q_ALL',
-    'Q_GAME',
-    'Q_NONGAME',
-    'Q_PERSONAL',
-
     # modules
     'socket',
     'tk',
+    'tkf',
     't',
     'thr',
 
@@ -80,7 +68,6 @@ __all__ = [
     'recvobj',
     'sendobj',
     'deal_cards',
-    'end_join',
     'holdem_combination',
     'compare_combinations',
     'poker_combination',
@@ -88,7 +75,6 @@ __all__ = [
     'switch_windows',
 
     # variables
-    'game_parameters',
     'player_parameters',
 
     # classes
@@ -108,22 +94,35 @@ __all__ = [
 
     'PokerPlayer',
     'PokerTable',
+    'PokerTableSprites',
 
     'Event',
     'EventQueue',
 ]
 
-# # # # # # # # # # # # # # # # | SERVER | # # # # # # # # # # # # # # # #
+##### Server
 def get_ip() -> str:
     try:
-        ip = urlreq.urlopen("https://ident.me", timeout=1.5).read().decode("utf8")
+        ip = urlreq.urlopen(
+            "https://ident.me", timeout=1.5
+        ).read().decode("utf8")
     except urlerr:
         ip = socket.gethostbyname(socket.gethostname())
     return ip
 
+def __arg_on_error(return_arg=False):
+    def wrap(func):
+        def _(*args):
+            try:
+                return func(*args)
+            except Exception as e:
+                return args if return_arg else e
+        return _
+    return wrap
+
 @__arg_on_error(True)
 def recvobj(sock_where: socket.socket):
-    '''Receive an object from `sock_where`\n\n return None on success'''
+    '''Receive an object from `sock_where`'''
     objlen = sock_where.recv(HEADLEN).decode()
     if not objlen:
         return None
@@ -131,20 +130,17 @@ def recvobj(sock_where: socket.socket):
     res = b''
     while len(res) < objlen:
         res += sock_where.recv(min(2048, objlen - len(res)))
-    # a = pickle.loads(res)
-    # print('got', a)
-    # return a
     return pickle.loads(res)
 
 @__arg_on_error(True)
-def sendobj(sock_where: socket.socket, obj):
+def sendobj(sock_where: socket.socket, obj) -> Union[None, socket.socket]:
     '''Send object `obj` to `sock_where`\n\nreturn None on success'''
     # print('sent', obj)
     obj = pickle.dumps(obj)
     obj = str(len(obj)).zfill(HEADLEN).encode() + obj
     return sock_where.sendall(obj)
 
-# # # # # # # # # # # # # # # # | POKER | # # # # # # # # # # # # # # # #
+##### Poker
 def deal_cards(player_count, game_type):
     return [choice(DECK) for i in range(player_count*(2 + 2*(game_type)) + 5)]
 
@@ -226,7 +222,7 @@ def holdem_combination(cards: list['Card']) -> PokerCombination:
         result.hand, result.kicker = (lambda a: ([a[0]], a[1:]))([ORDER.index(card) for card in nominals[1:]][:5])
     return result
 
-def compare_combinations(combinations: list[PokerCombination]) -> PokerCombination:
+def compare_combinations(combinations: list[PokerCombination]):
     '''Return best combination of `combinations`'''
     current = combinations[0]
     for comb in combinations[1:]:
@@ -237,17 +233,25 @@ def compare_combinations(combinations: list[PokerCombination]) -> PokerCombinati
                 current = comb
     return current
 
-def poker_combination(player_cards: list['Card'], table_cards: list['Card'], game_type: Literal[0, 1]) -> PokerCombination:
+def poker_combination(player_cards: list['Card'],
+                      table_cards: list['Card'],
+                      game_type: Literal[0, 1]):
     if game_type == 0:
         return holdem_combination(player_cards + table_cards)
+
     player_card_variants = [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
     if not len(table_cards):
-        return compare_combinations([holdem_combination([player_cards[i] for i in p_var]) for p_var in player_card_variants])
-    result: list[PokerCombination] = []
+        return compare_combinations(
+                [holdem_combination([player_cards[i] for i in p_var]
+            ) for p_var in player_card_variants])
+    result = []
     table_card_variants = [*itertools_combs(range(len(table_cards)), 3)]
     for p_var in player_card_variants:
         for t_var in table_card_variants:
-            result.append(holdem_combination([player_cards[i] for i in p_var] + [table_cards[j] for j in t_var]))
+            result.append(holdem_combination(
+                [player_cards[i] for i in p_var]
+                + [table_cards[j] for j in t_var]
+            ))
     return compare_combinations(result)
 
 def share_the_pot(pot, *players: 'PokerPlayer') -> int:
@@ -255,25 +259,53 @@ def share_the_pot(pot, *players: 'PokerPlayer') -> int:
     for p in players:
         p.bankroll += pot // len(players)
 
-# # # # # # # # # # # # # # # # # # | MAIN | # # # # # # # # # # # # # # # # # #
+##### Main
 IP, PORT = get_ip(), 50240
 DIR = '\\'.join(__file__.split('\\')[:-2])
 TITLE = "Tony\'s Card Games Catalogue"
-DIMS = {
-    'menu': (500, 600),
-    'middle': (500, 130),
-    'game' : (1400, 900)
-}
 
-game_parameters = {
-    'Game' : None,            # Poker - Durak
-    'Player count' : None     # 2 - 8
-}
-
+player_parameters: dict[Literal['name', 'IP'], str]
 if os.path.exists(DIR + r'\util\player.json'):
-    player_parameters: dict[Literal['Name', 'IP'], str] = json.load(open(DIR + r'\util\player.json'), 'r')
+    player_parameters = json.load(open(DIR + r'\util\player.json'), 'r')
 else:
-    player_parameters = {'Name' : '', 'IP' : ''}
+    player_parameters = {'name' : '', 'IP' : ''}
+
+class Event:
+    codes = {
+        'Shutdown'      : -5, 'Disconnect'    : -1, 'Action ask'    :  0,
+        'Player action' :  1, 'Chat message'  :  5, 'Info'          : 10,
+    }
+    def __init__(self, code: int, data, *,
+            private: bool = False, reciever_id: str = ...):
+        self.code = code
+        self.data = data
+        # if set, event must be handled only by player with this id:
+        self.private = private
+        self.receiver_id = reciever_id
+
+    def __repr__(self) -> str:
+        return ('<Event, ' + f'{self.code=}, {self.data=}, {self.private=}'
+                + f'{self.receiver_id=}'*(self.receiver_id != ...) + '>')
+
+class EventQueue:
+    def __init__(self) -> None:
+        self.dt = 1/500
+        self.lock = thr.Lock()
+        self.queue: deque[Event] = deque()
+
+    def append(self, event: Event):
+        with self.lock:
+            self.queue.append(event)
+
+    def extend(self, *events: Event):
+        with self.lock:
+            [self.queue.append(ev) for ev in events]
+
+    def pop(self):
+        '''Return first element in queue or `None` if queue is empty'''
+        with self.lock:
+            if len(self.queue):
+                return self.queue.popleft()
 
 class WImage:
     '''cached tk.PhotoImage'''
@@ -284,9 +316,10 @@ class WImage:
         return instance
 
 class WindowSheet:
-    def __init__(self, master: 'Window', grid_items: list[tk.Widget] = None, place_items: list[tk.Widget] = None) -> None:
+    def __init__(self, master: 'Window', grid_items: list[tk.Widget] = None,
+                 place_items: list[tk.Widget] = None):
         self.grid_collection: list[tk.Widget] = []
-        self.place_collection: dict[tk.Widget, dict[str, ]] = {}
+        self.place_collection: dict[tk.Widget, dict[str, tk._PlaceInfo]] = {}
         if grid_items:
             self.add_grid(*grid_items)
         if place_items:
@@ -294,51 +327,50 @@ class WindowSheet:
         master._sheets.append(self)
 
     def add_grid(self, *items):
-        self.grid_collection += reduce(lambda res, a: res + [a] if not isinstance(a, list) else res + a, items, [])
-        self.hide()
+        self.grid_collection += items
 
-    def add_place(self, *items):
-        items_lst: list[tk.Widget] = reduce(lambda res, a: res + [] if not isinstance(a, list) else res + a, items, [])
-        self.place_collection = {**{a: a.place_info() for a in items_lst}, **self.place_collection}
+    def add_place(self, *items: tk.Widget):
+        for item in items:
+            self.place_collection[item] = item.place_info()
 
-    def hide(self): [elem.grid_remove() for elem in self.grid_collection]
-    def show(self): [elem.grid() for elem in self.grid_collection]
-    def disable(self): [elem.configure(state='disabled') for elem in self.grid_collection]
-    def enable(self): [elem.configure(state='normal') for elem in self.grid_collection]
+    def hide(self): [*map(tk.Grid.grid_remove, self.grid_collection)]
+    def show(self): [*map(tk.Grid.grid, self.grid_collection)]
 
 class Window:
     current_window = None
-    quit = 0
-    __ins: list["Window"] = []
+    __instances: list["Window"] = []
+    did_quit = False
 
     @classmethod
     def quit_window(cls):
         Trigger.disable()
-        for w in Window.__ins:
+        for w in Window.__instances:
             w.win.destroy()
-        Window.quit = True
+        Window.did_quit = True
 
-    def __init__(self, name: str, title: str, master: 'Window' = ..., bg: str = None) -> None:
+    def __init__(self, size: tuple[int, int], title: str, master: 'Window' = ..., bg: str = None):
         self._sheets: list[WindowSheet] = []
-        self._size = DIMS[name]
         self.win = tk.Tk() if master == ... else tk.Toplevel(master.win)
         self.win.protocol('WM_DELETE_WINDOW', Window.quit_window)
         self.win.resizable(0, 0)
         self.win.title(title)
-        a, b = (self.win.winfo_screenwidth() - self._size[0]) // 2, (self.win.winfo_screenheight() - self._size[1]) // 2
-        self._geometry = f'{self._size[0]}x{self._size[1]}+{a}+{b}'
-        self.win.geometry(self._geometry)
+        a = (self.win.winfo_screenwidth() - size[0]) // 2
+        b = (self.win.winfo_screenheight() - size[1]) // 2
+        self.geometry = f'{size[0]}x{size[1]}+{a}+{b}'
+
+        self.win.geometry(self.geometry)
         self.current_sheet = None
-        if bg != None: self.win['bg'] = bg
+        if bg != None:
+            self.win['bg'] = bg
         self._hidden: bool = False
 
-        for column in range(self._size[0] // 10):
+        for column in range(size[0] // 10):
             self.win.columnconfigure(column, weight=1, minsize=10)
-        for row in range(self._size[1] // 10):
+        for row in range(size[1] // 10):
             self.win.rowconfigure(row, weight=1, minsize=10)
         self.hide()
         if master == ...:
-            Window.__ins.append(self)
+            Window.__instances.append(self)
 
     def _show_sheet(self, sheet: WindowSheet):
         [sh.hide() for sh in self._sheets if sh != sheet]
@@ -350,15 +382,16 @@ class Window:
 
     def show(self, sheet: WindowSheet):
         if self._hidden:
-            self.win.geometry(self._geometry)
+            self.win.geometry(self.geometry)
             self._hidden = not self._hidden
         self._show_sheet(sheet)
         self.current_sheet = sheet
         self.win.deiconify()
         self.win.focus_set()
-        __class__.current_window = self
+        Window.current_window = self
 
     def mainloop(self): self.win.mainloop()
+    def update(self): self.win.update()
 
     def enable_debug(self):
         column = lambda e: (e.x + (e.widget.winfo_x() if e.widget != self.win else 0))
@@ -368,9 +401,8 @@ class Window:
 def switch_windows(from_: Window, to: Window, which: int):
     from_.hide()
     to.show(which)
-    Window.current_window = to
 
-def smartify_entry(entry: tk.Entry):
+def smartify_entry(entry: tk.Entry) -> tk.Entry:
     def copy(entry: tk.Entry):
         if entry.select_present():
             entry.clipboard_clear()
@@ -417,21 +449,25 @@ def smartify_entry(entry: tk.Entry):
 class CanvasChat:
     LETTER_HEIGHT = 20
 
-    def __init__(self, coords: tuple[int, int], canv: tk.Canvas, font, fill, width) -> None:
+    def __init__(self, coords: tuple[int, int], canv: tk.Canvas, font, fill):
         self.canv = canv
         self.x, self.y = coords
         self.font = tkf.Font(self.canv, font)
-        self.MAX_LINE_LEN = width - self.x
+
+        width = self.canv['scrollregion'].split(' ')[2]
+        self.MAX_LINE_LEN = int(width) - self.x
         self.fill = fill
 
-    def add_line(self, line: str):
+    def post_message(self, line: str):
         def add_char(char):
             nonlocal x, y
             if self.font.measure(char) + x + 1 > self.MAX_LINE_LEN:
                 x = self.x
                 y += self.LETTER_HEIGHT + 2
 
-            self.canv.create_text(x, y, text=char, anchor='nw', justify='left', font=self.font, fill=color)
+            self.canv.create_text(x, y, text=char, anchor='nw',
+                                  justify='left', font=self.font,
+                                  fill=color)
             x += self.font.measure(char) + 1
 
         colors = {
@@ -451,10 +487,10 @@ class CanvasChat:
                 while char[-1] != '#' or len(char) == 1:
                     char += line[0]
                     line = line[1:]
-                if char[1: -1] in colors:                       #DO possibilities for other tags
+                if char[1: -1] in colors:
                     color = colors[char[1: -1]]
                 else:
-                    [add_char(ch) for ch in char]
+                    [add_char(ch) for ch in char.join('##')]
                 continue
 
             add_char(char)
@@ -468,66 +504,65 @@ class CanvasChat:
         self.canv.configure(scrollregion=scrollregion)
 
 class Card:
-    def __init__(self, master: 'Window', card_value: tuple[Union[int, str], str], shirt_up: bool = False, small: bool = False) -> None:
-        self.rank, self.suit = card_value
+    def __init__(self, master: 'Window', value: tuple[Union[int, str], str],
+                 small=False):
+        self.rank, self.suit = value
         self.master = master
-        self.is_shirt_up = shirt_up
         self.is_small = small
-        file = DIR + r'\gfx\cards\\' + str(DECK.index(card_value)) + ('.png' if not small else '_small.png')
+        file = DIR + r'\gfx\cards\\' + str(DECK.index(value)) + ('.png' if not small else '_small.png')
         self.label = tk.Label(master.win, image=WImage(self.master, file))
-        self.__manager = None
-
-    def grid(self, row: int, column: int) -> None:
-        assert not self.is_small, 'can\'t grid() small card'
-        self.label.grid(row=row, column=column, rowspan=13, columnspan=8, sticky='NWES')
-        self.__manager = 'grid'
 
     def place(self, x: int, y: int):
-        self.label.place(x=x, y=y,
-            width=64 if self.is_small else 80,
-            height=120 if self.is_small else 130)
-        self.__manager = 'place'
+        width, height = [(80, 130), (64, 102)][self.is_small]
+        self.label.place(x=x, y=y, height=height, width=width)
 
-    def hide(self):
-        self.label.grid_remove() if self.__manager == 'grid' else self.label.place_forget()
+    def hide(self): self.label.place_forget()
 
-    def __repr__(self) -> str:
-        return f'<Card, {self.rank} of {self.suit}>'
+    def __repr__(self): return f'<Card, {self.rank} of {self.suit}>'
 
-    def __getitem__(self, val):
-        return [self.rank, self.suit][val]
+    def __getitem__(self, val): return [self.rank, self.suit][val]
 
-class sprites:
+class PokerTableSprites:
     #pixel positions of all player "equipment" - chips, cards and real cards positions for showing
     #TODO: card positions (after seat graphics)                                              blue     green       red
     __coords = {
-        0 : {'table': (216, 306), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((27, 28), (26, 28), (25, 29)), 'seat': (0, 0)},
-        1 : {'table': (436, 264), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((51, 28), (51, 27), (50, 27)), 'seat': (0, 0)},
-        2 : {'table': (616, 264), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((70, 27), (69, 27), (68, 27)), 'seat': (0, 0)},
-        3 : {'table': (818, 306), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((83, 28), (83, 29), (84, 29)), 'seat': (0, 0)},
-        4 : {'table': (813, 420), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((82, 50), (83, 50), (84, 49)), 'seat': (0, 0)},
-        5 : {'table': (616, 472), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((67, 50), (68, 50), (69, 51)), 'seat': (0, 0)},
-        6 : {'table': (436, 472), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((39, 51), (40, 51), (41, 51)), 'seat': (0, 0)},
-        7 : {'table': (216, 416), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((26, 49), (27, 49), (27, 50)), 'seat': (0, 0)}
+        0 : {'table': (216, 306), 'cards': {'Poker' : (19, 163), 'Omaha' : (0, 0)}, 'chips': ((27, 28), (26, 28), (25, 29)), 'rect': (0, 0)},
+        1 : {'table': (436, 264), 'cards': {'Poker' : (330, 80), 'Omaha' : (0, 0)}, 'chips': ((51, 28), (51, 27), (50, 27)), 'rect': (0, 0)},
+        2 : {'table': (616, 264), 'cards': {'Poker' : (630, 80), 'Omaha' : (0, 0)}, 'chips': ((70, 27), (69, 27), (68, 27)), 'rect': (0, 0)},
+        3 : {'table': (818, 306), 'cards': {'Poker' : (950, 163), 'Omaha' : (0, 0)}, 'chips': ((83, 28), (83, 29), (84, 29)), 'rect': (0, 0)},
+        4 : {'table': (813, 420), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((82, 50), (83, 50), (84, 49)), 'rect': (0, 0)},
+        5 : {'table': (616, 472), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((67, 50), (68, 50), (69, 51)), 'rect': (0, 0)},
+        6 : {'table': (436, 472), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((39, 51), (40, 51), (41, 51)), 'rect': (0, 0)},
+        7 : {'table': (216, 416), 'cards': {'Poker' : (0, 0), 'Omaha' : (0, 0)}, 'chips': ((26, 49), (27, 49), (27, 50)), 'rect': (0, 0)}
     }
     def __init__(self, master: Window, sit: int) -> None:
-        self.sit_num = sit
+        self.sit = sit
         self.master = master
-        # self.seat: WImage #TODO: seat
-        # self.seat.place()
-        file = DIR + f"/gfx/cards/cards{'_down'*(sit in [0, 4]) + '_up'*(sit in [3, 7])}.png"
-        self.magic_numbers = [0, 330, 620]
-        self.small_cards = tk.Label(master.win, image=WImage(master, file))
+        small_cards_file = (DIR + f"/gfx/cards/cards"
+                                + '_down'*(sit in [0, 4])
+                                + '_up'*(sit in [3, 7])
+                                + ".png")
+        self.small_cards = tk.Label(master.win, image=WImage(master, small_cards_file))
 
+        self.frame = tk.Frame()
+
+
+
+
+
+        #TODO: player stats rectangular canvas with data
         self.tokens: list[tk.Label] = []
         for color in ['blue', 'green', 'red']:
             self.tokens.append(tk.Label(master.win,
                 image=WImage(master, DIR + rf'\gfx\tokens\token {color}.png')))
 
+        self.magic_numbers = [0, 330, 620]
+
     def show_tokens(self, p_bankroll: int):
         n = sum(p_bankroll > a for a in self.magic_numbers)
+
         for i, token in enumerate(self.tokens[:n]):
-            column, row = self.__coords[self.sit_num]['chips'][i]
+            column, row = self.__coords[self.sit]['chips'][i]
             token.grid(row=row, column=column, rowspan=1, columnspan=1)
 
         for token in self.tokens[n:]:
@@ -537,145 +572,35 @@ class sprites:
         [token.grid_remove() for token in self.tokens]
 
     def show_table_cards(self):
-        x, y = self.__coords[self.sit_num]['table']
-        w, h = ((66, 69) if self.sit_num in [3, 7] else         # diagonal /
-                (71, 66) if self.sit_num in [0, 4] else         # diagonal \
+        x, y = self.__coords[self.sit]['table']
+        w, h = ((66, 69) if self.sit in [3, 7] else             # diagonal /
+                (71, 66) if self.sit in [0, 4] else             # diagonal \
                 (48, 55))                                       # vertical |
         self.small_cards.place(x=x, y=y, width=w, height=h)
 
     def hide_table_cards(self):
         self.small_cards.place_forget()
 
-    def show_cards(self, cards: list[Card], game_type: bool, time: float):
-        def hide_cards():
-            map(tk.Place.place_forget, cards)
+    def show_true_cards(self, cards: list[Card], game_type: bool):
+        x, y = self.__coords[self.sit]['cards'][['Poker', 'Omaha'][game_type]]
+        div = 32 + 2
+        for i in range([2, 4][game_type]):
+            pass
+        [cards[i].place(x + i*(64 + 2), y) for i in range([2, 4][game_type])]
 
-        x, y = self.__coords['cards'][['Poker', 'Omaha'][game_type]]
-        for i in range(4 if game_type else 2):
-            cards[i].place(x, y)
-
-        self.master.win.after(time*1000, hide_cards)
-
-class Event:
-    '''Codes:
-    ```
-    | Shutdown      -5 | Disconnect    -1 |
-    | Action ask     0 | Player action  1 |
-    | Chat message   5 | Info          10 |
-    '''
-    codes = {
-        'Shutdown'      : -5,
-        'Disconnect'    : -1,
-        'Action ask'    :  0,
-        'Player action' :  1,
-        'Chat message'  :  5,
-        'Info'          : 10,
-    }
-
-    [ACTIONS_CHECK, ACTIONS_CALL, ACTIONS_BET, ACTIONS_RAISE,
-    ACTIONS_FOLD, ACTIONS_QUIT, ACTIONS_MUCK, ACTIONS_SHOW]
-
-    def __init__(self, code: int, data, *, private_for: socket.socket = ...):
-        self.code = code
-        self.data = data
-        if private_for != ...:
-            self.receiver = private_for
+    def hide_true_cards(self, cards: list[Card]):
+        map(tk.Place.place_forget, cards)
 
 
 
 
-class Event:
-    '''Codes:
-    ```| Shutdown      -5 | Timeout       -2 |
-    | Disconnect    -1 | Act            0 |
-    | Check          1 | Call           2 |
-    | Bet            3 | Raise          4 |
-    | Fold           5 | Quit           6 |
-    | Muck           7 | Show           8 |
-    | Chat message  10 | Continue?     11 |
-    | Game finished 12 | Game goes on  13 |
-    | Facility      20 |
-    '''
-    # Server - game finished
-    # Server - game continues
-    codes = {
-        'Shutdown'          : -5,                               # server
-        'Timeout'           : -2,                               # player
-        'Disconnect'        : -1,                               # player
-        'Act'               :  0,                               # player ...
-        ACTIONS_CHECK       :  1,
-        ACTIONS_CALL        :  2,                                   # argument - sum
-        ACTIONS_BET         :  3,                                   # argument - sum
-        ACTIONS_RAISE       :  4,
-        ACTIONS_FOLD        :  5,
-        ACTIONS_QUIT        :  6,
-        ACTIONS_MUCK        :  7,
-        ACTIONS_SHOW        :  8,
-        'Chat message'      : 10,
-        'Facility'          : 20,
-    }
-
-    def __init__(self, code, name, args = None):
-        self.code = code
-        self.name = name
-        self.args = args
-
-    def __repr__(self) -> str:
-        return f'<{self.__class__.__name__}, code={self.code}, name={self.name}, args={self.args}>'
-
-class EventQueue:
-    def __init__(self, pause_s: float = 1/350) -> None:
-        self.dt = pause_s
-        self.lock = thr.Lock()
-        self.q: deque[tuple[str, Event]] = deque()
-
-    def __lock_control(func):
-        def _(self: 'EventQueue', *args):
-            t.sleep(self.dt)
-            with self.lock:
-                return func(self, *args)
-        return _
-
-    @__lock_control
-    def push(self, event: 'Event', tag = Q_ALL):
-        self.q.append((tag, event))
-
-    @__lock_control
-    def extend(self, tag = Q_ALL, *events: 'Event'):
-        for ev in events:
-            self.q.append((tag, ev))
-
-    @__lock_control
-    def pop(self, tag=Q_ALL) -> Union[tuple[str, Event], None]:
-        '''Return None if no value with tag was found'''
-        def search(tags, exclude_tags):
-            try:
-                n = 0
-                while n < len(self.q):
-                    item = self.q[0]
-                    if item[0] in tags and item[0] not in exclude_tags:
-                        return self.q.popleft()
-                    self.q.rotate(1)
-                    n += 1
-            finally:
-                if n not in [0, len(self.q)]:
-                    self.q.rotate(1 - n)
-
-        if not len(self.q) or (tag not in [*zip(*self.q)][0] and tag != Q_NONGAME):
-            return
-
-        if tag == Q_ALL:
-            return self.q.popleft()
-
-        if tag == Q_NONGAME:
-            return search()
-
-        return search(tag)
 
 class PokerPlayer:
-    def __init__(self, name: str, sit: int, master: Window):
-        self.name, self.sit = name, sit
-        self.sprites = sprites(master, sit)
+    def __init__(self, id: str, name: str, sit: int):
+        self.id = id
+        self.name = name
+        self.sit = sit
+
         self.current_bet = 0
         self.did_move = False
         self.is_dealer = False
@@ -683,16 +608,18 @@ class PokerPlayer:
         self.set_default()
 
     def set_default(self):
-        self.is_out = False
+        self.folded = False
         self.cards = []
 
     def bet(self, bet: int, *, sb=False, bb=False) -> str:
         self.current_bet = min(bet, self.bankroll)
         line = f'#GREEN#{self.name}##'
+
         if self.current_bet == self.bankroll:
             line += f" goes all-in #YELLOW#({self.current_bet}##$)"
         else:
             line += f" bets #YELLOW#{self.current_bet}##$"
+
         if sb or bb:
             line += f" as a {['small', 'big'][bb]} blind"
 
@@ -717,7 +644,7 @@ class PokerTable:
     def set_default(self): [p.set_default() for p in self.players]
 
     def alive_players(self):
-        return [p for p in self.players if p.bankroll and not p.is_out]
+        return [p for p in self.players if p.bankroll and not p.folded]
 
     def party(self, small_blind: int, game_type: bool):
         def share_the_pot(*winners: PokerPlayer):
@@ -728,7 +655,7 @@ class PokerTable:
 
 
         def get_options(p: 'PokerPlayer', bet=0) -> list[str]:
-            if not p.bankroll or p.is_out:
+            if not p.bankroll or p.folded:
                 return
 
             p.did_move = True
@@ -750,14 +677,14 @@ class PokerTable:
             pass
 
         def active_players():
-            return [p for p in self.players if not p.is_out]
+            return [p for p in self.players if not p.folded]
 
         def showdown_ask(p: PokerPlayer):
             '''send cards, send two options, get result'''
             pass
 
         def check_the_bets(bet: int):
-            return all([p.did_move and (p.current_bet in [bet, p.bankroll] or p.is_out) for p in self.players])
+            return all([p.did_move and (p.current_bet in [bet, p.bankroll] or p.folded) for p in self.players])
 
         sits = len(self.players)
         game_state = 0
@@ -768,27 +695,27 @@ class PokerTable:
 
         for i, p in enumerate(self.players):
             [p.cards.append(table_cards.pop(0)) for i in range(1 + game_type*2)]
-            self.q.push(Event(20, p.name, {'Cards' : p.cards, 'sit' : i}), Q_PERSONAL)
+            self.q.append(Event(20, p.name, {'Cards' : p.cards, 'sit' : i}), EventPrivacyType.PERSONAL)
 
         # self.q.push(Event(20, None, {'Table cards' : table_cards}))
 
         while game_state < 4 and len(active_players()) > 1:
             bet = 0
-            self.q.push(Event(20, None, {'Table cards' : table_cards[:bool(game_state) * (game_state + 2)]}))
+            self.q.append(Event(20, None, {'Table cards' : table_cards[:bool(game_state) * (game_state + 2)]}))
 
             if game_state == 0:
                 _blinds = [
                     self.alive_players()[(dealer_place + 1) % 2].bet(small_blind, sb=True),
                     self.alive_players()[(dealer_place + 2) % 2].bet(small_blind*2, bb=True)
                 ]
-                self.q.extend(Q_ALL, *map(lambda b: Event(3, None, b), _blinds))
+                self.q.extend(EventPrivacyType.ALL, *map(lambda b: Event(3, None, b), _blinds))
                 bet = max([a.current_bet for a in self.players])
                 counter = (dealer_place + 3) % sits
 
             while (counter < sits or not check_the_bets(bet)) and len(active_players()) > 1:
                 p_current = active_players()[counter % sits]
-                self.q.push(Event(0, p_current.name, {'options': get_options(p_current, bet)}))
-                self.wait(Q_GAME)
+                self.q.append(Event(0, p_current.name, {'options': get_options(p_current, bet)}))
+                self.wait(EventPrivacyType.GAME)
                 bet = max(bet, p_current.current_bet)
                 counter += 1
 
@@ -805,7 +732,7 @@ class PokerTable:
         if len(active_players()) == 1:
             _winner = active_players()[0]
 
-            self.q.push(Event(10, None, f'Player #GREEN#{_winner.name}## wins'))
+            self.q.append(Event(10, None, f'Player #GREEN#{_winner.name}## wins'))
             share_the_pot(_winner)
 
             pass
@@ -837,7 +764,7 @@ class PokerTable:
             pass
 
     def game(self, game_type, small_blind = 10):
-        self.q.push(Event(10, None, f'Game starts, small blind: #RED#{small_blind}##$'))
+        self.q.append(Event(10, None, f'Game starts, small blind: #RED#{small_blind}##$'))
         blind = small_blind
         self.players[0].is_dealer = True
         rounds = 0
@@ -846,14 +773,14 @@ class PokerTable:
             if rounds == 5:
                 rounds = 0
                 blind *= 2
-                self.q.push(Event(10, None, f'small blind doubled, it\'s #RED#{blind}##$ now'))
+                self.q.append(Event(10, None, f'small blind doubled, it\'s #RED#{blind}##$ now'))
             self.party(blind, game_type)
             rounds += 1
 
         winner = self.alive_players()[0]
-        self.q.push(Event(10, None, f'Player {winner.name} is the winner of the game'))
+        self.q.append(Event(10, None, f'Player {winner.name} is the winner of the game'))
         t.sleep(2.5)
-        self.q.push(Event(11, None, f'Waiting for host...'))
+        self.q.append(Event(11, None, f'Waiting for host...'))
 
 
 
@@ -867,7 +794,8 @@ class _PokerTable:
     def __init__(self, *players: PokerPlayer) -> None:
         self.players = players
 
-    def set_default(self): [p.set_default for p in self.players]
+    def set_default(self):
+        [p.set_default for p in self.players]
 
 
 
@@ -914,7 +842,7 @@ class _PokerTable:
 
         def check_the_bets(bet: int):
             '''All the players did move, called or all-in'd or folded'''
-            return all([p.did_move and (p.current_bet in [bet, p.bankroll] or p.is_out) for p in self.players])
+            return all([p.did_move and (p.current_bet in [bet, p.bankroll] or p.folded) for p in self.players])
 
         def ask(player: PokerPlayer, table_cards: tuple[Card]):
             comb = poker_combination(player.cards, table_cards, game_type)
@@ -934,7 +862,7 @@ class _PokerTable:
         table_cards = deal_cards(sits, game_type)
         self.set_default()
 
-        def active_players(): return [p for p in self.players if not p.is_out]
+        def active_players(): return [p for p in self.players if not p.folded]
 
         for player in self.players:
             [player.cards.append(table_cards.pop(0)) for i in range(1 + game_type)]
@@ -954,7 +882,7 @@ class _PokerTable:
 
             while (counter < len(self.players) or not check_the_bets(bet)) and len(active_players()) > 1:
                 current_player = self.players[counter % sits]
-                if current_player.bankroll and not current_player.is_out:
+                if current_player.bankroll and not current_player.folded:
                     #DO inform others
                     current_player.action(bet, small_blind)
                 bet = max(bet, current_player.current_bet)
