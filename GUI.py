@@ -1,11 +1,11 @@
 import tkinter as tk
 import tkinter.font as tkf
 from consts import *
-from poker import *
+from game import *
 
 class Sprite:
     cache = []
-    def __new__(cls, master: 'Window', file):
+    def __new__(cls, master: 'Window', file: str):
         instance = tk.PhotoImage(master=master.win, file=file)
         cls.cache.append(instance)
         return instance
@@ -13,7 +13,8 @@ class Sprite:
 class WindowSheet:
     def __init__(self, master: 'Window',
                  grid_items: list[tk.Widget] = None,
-                 place_items: list[tk.Widget] = None):
+                 place_items: list[tk.Widget] = None
+                 ):
         self.grid_collection: list[tk.Widget] = []
         self.place_collection: dict[tk.Widget, dict[str, tk._PlaceInfo]] = {}
 

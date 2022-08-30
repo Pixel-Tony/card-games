@@ -3,7 +3,7 @@ import threading as thr
 
 from consts import *
 from GUI import *
-from poker import *
+from game import *
 from server import *
 
 player_parameters = load_player_data()
@@ -282,22 +282,37 @@ def change_nickname(initial: bool = False):
     entry_11_nickname.insert(0, player_parameters['name'])
 
     button_11_save.configure(command=confirm_attempt,
-        state=['normal', 'disabled'][initial])
-    button_11_back.configure(command=Window.main_quit
+                             state=['normal', 'disabled'][initial])
+    button_11_back.configure(command=
+        Window.main_quit
         if initial
-            else lambda:
-                Window.switch(win_middle, win_menu, sheet_main_menu))
+        else lambda: Window.switch(win_middle, win_menu, sheet_main_menu)
+    )
 
     Window.switch(win_menu, win_middle, sheet_nickname)
 
 def initial_nickname_check():
     if player_parameters['name'] == '':
         change_nickname(True)
+##################################
+##################################
+
+
+
+
+
+
+
+
+
+
+
+
 
 # # # # # # # # # # # # # # | Game host function | # # # # # # # # # # # # #
 def game_host(game: str):
-    def disconnect_player(conn: Socket, left: bool = False):
-        if left:
+    def disconnect_player(conn: Socket, p_left: bool = False):
+        if p_left:
             sendobj(conn, GCODE_DISCONNECT)
         if conn in readers:
             readers.remove(conn)
@@ -309,11 +324,11 @@ def game_host(game: str):
 
     def close_lobby():
         for conn in connections:
-            if conn == sock:
+            if conn == socket:
                 continue
             sendobj(conn, GCODE_SHUT_CONNECTION)
             conn.close()
-        sock.close()
+        socket.close()
         Window.switch(win_middle, win_menu, sheet_main_menu)
 
     if game != 'Poker':
@@ -322,33 +337,65 @@ def game_host(game: str):
     button_02_start.configure(state='disabled')
     win_menu.show(sheet_lobby_host)
 
-    t_is_closed, t_is_started = Trigger(), Trigger()
+    t_is_started, t_is_closed = Trigger(), Trigger()
     button_02_close.configure(command=t_is_closed.toggle)
     button_02_start.configure(command=t_is_started.toggle)
 
-    sock = Socket()
-    sock.bind(('', PORT))
-    sock.listen(10)
+    socket = Socket()
+    socket.bind(('', PORT))
+    socket.listen(10)
 
-    connections: dict[Socket, dict[str, str]] = {}
-    connections[sock] = {'name' : player_parameters['name'], 'id' : 'HOST'}
-
-    readers, listeners = [sock], []
-
+    connections: dict[Socket, dict[str, str]] = {
+        socket : {'name' : player_parameters['name'], 'id' : 'HOST'}
+    }
+    readers, listeners = [socket], []
 
     n_connecting = 0
+
     @delta_time(1/60)
     def update():
         nonlocal n_connecting
+
         win_menu.update()
 
-        lst_read: list[Socket]
-        lst_send: list[Socket]
+        to_read, to_answer, _ = select.select(readers,
+                                              listeners,
+                                              [],
+                                              0.001
+                                              )
+        conn: Socket
+        for conn in to_read:
+            if conn == socket:
+                p_sock, address = socket.accept()
+                if len(connections) == 8:
+                    sendobj(p_sock, GCODE_SERVER_FULL)
+                    p_sock.close()
+                    continue
+
+                p_sock.settimeout(3)
+                connections[p_sock] = {
+                    'name' : 'connecting...',
+                    'ID' : ':'.join(map(str, address))
+                }
+                n_connecting += 1
+                continue
+
+
+
+
+    @delta_time(1/60)
+    def update():
+        nonlocal n_connecting
+
+        win_menu.update()
+
         lst_read, lst_send = select.select(readers, listeners, [], 0.001)[:-1]
         for conn in lst_read:
+            conn: Socket
+
             # new connection received
-            if conn == sock:
-                player, address = sock.accept()
+            if conn == socket:
+                player, address = socket.accept()
                 if len(connections) == 8:
                     sendobj(player, GCODE_SERVER_FULL)
                     player.close()
@@ -356,8 +403,8 @@ def game_host(game: str):
 
                 player.settimeout(SOCKET_TIMEOUT)
                 connections[player] = {
-                    'name' : 'connecting...',
-                    'id' : ':'.join(map(str, address))
+                    'name'  : 'connecting...',
+                    'id'    : ':'.join(map(str, address))
                 }
                 readers.append(player)
                 n_connecting += 1
@@ -411,14 +458,14 @@ def game_host(game: str):
 
     # Game start
     for conn in connections:
-        if conn == sock:
+        if conn == socket:
             continue
 
         if sendobj(conn, GCODE_SUCCESS):
             close_lobby()
             return
 
-    result = poker_session(sock, connections)
+    result = poker_session(socket, connections)
     #TODO: handle result
 
 
@@ -512,9 +559,62 @@ def game_join() -> bool:
         t_left_lobby:= Trigger()
     )
 
-    @delta_time(0.016)
+    state: PokerLobbyState = InLobby
+
+
+
+    @delta_time(1/60)
     def update():
+        '''Return True on event '''
+
+        '''
+        Send nothing
+        Recieve:
+        '''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         win_menu.update()
+        data: T.Union[dict, Socket] = recvobj(sock)
+
+        if 'error' in data:
+            if data == GCODE_SHUT_CONNECTION:
+                t_left_lobby.toggle()
+            elif data == GCODE_SUCCESS:
+                t_game_started.toggle()
+            else:
+                t_game_aborted.toggle()
+            return True
 
         data: T.Union[list[str], int] = recvobj(sock)
         if isinstance(data, list):
@@ -533,12 +633,32 @@ def game_join() -> bool:
 
     while not any((*t_gp, Window.current() != win_menu, Window.did_quit)):
         if update() == False:
-            return False
-
-    if Window.did_quit:
-        return False
+            return #TODO:
 
     if t_game_started:
+        result, errmsg = PokerSession(False,
+                                      {"Omaha" : }
+                                      ).as_player(sock)
+        if result != 0:
+            message_win_show(errmsg)
+        return #TODO:
+
+    else:
+        if Window.did_quit:
+            return #TODO:
+
+        elif t_left_lobby:
+            Window.switch(win_menu, win_middle, sheet_connect)
+            message_win_show('Game closed')
+            return #TODO:
+
+
+        elif Window.current() != win_menu:
+            sendobj(sock, GCODE_DISCONNECT)
+            recvobj(sock)
+            return #TODO:
+
+    elif t_game_started:
         # Gameplay here
         result, errmsg = poker_session(sock)
 
@@ -548,17 +668,6 @@ def game_join() -> bool:
             message_win_show(result)
         #TODO: handle result
         return False
-
-    elif t_left_lobby:
-        Window.switch(win_menu, win_middle, sheet_connect)
-        message_win_show('Game closed')
-
-    elif Window.current() != win_menu:
-        sendobj(sock, GCODE_DISCONNECT)
-        recvobj(sock)
-
-    # quit lobby
-    return True
 
 # # # # # # # # # # # # # # | Poker game function | # # # # # # # # # # # # #
 class BasePokerState:

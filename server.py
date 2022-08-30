@@ -24,7 +24,7 @@ def get_ip() -> str:
     return ip
 
 @arg_on_error
-def recvobj(sock_where: Socket) -> T.Union[None, Socket]:
+def recvobj(sock_where: Socket):
     '''Receive an object from `sock_where`'''
     objlen = sock_where.recv(8).decode()
     if not objlen:
