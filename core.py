@@ -1,16 +1,19 @@
 # Constants section
-import typing as T
 import enum
-import tkinter as tk
-import tkinter.font as tkf
 import random
-import itertools as iterts
-import time as t
 import os.path
 import socket
 import pickle
+import typing as T
+import tkinter as tk
+import tkinter.font as tkf
+import itertools as iterts
+import threading as thr
+import time as t
+import select as sel
 from urllib import request as urlreq
 from urllib.error import URLError
+
 
 class Colors(str, enum.Enum):
     WHITE = '#fff'
@@ -48,10 +51,10 @@ CNF_MENU_BUTTON = {
     'bg': 'DeepSkyBlue3',
     'activebackground': 'DeepSkyBlue2'
 }
-CNF_MENU_BUTTON_P = {'width' : 240, 'height' : 40, 'x' : 130}
 CNF_LABEL = {'bg': Colors.BG, 'fg': 'white'}
-CNF_GAME_CHOICE_BUTTON_P = {'height' : 40, 'x' : 180, 'width' : 140}
 CNF_ENTRY = {'font' : Fonts.MIDDLE, 'bg' : 'CadetBlue1'}
+
+B_STATES = ['disabled', 'normal']
 
 class PokerActionType(enum.Enum):
     CHECK = 'Check'
@@ -78,24 +81,35 @@ class PlayerData:
 
     @classmethod
     def load(cls) -> dict:
-        if os.path.exists('./data/player.txt'):
-            lines = open('./data/player.txt', 'r').readlines()
-            cls.data = {'name' : lines[0], 'IP' : lines[1]}
-        else:
-            cls.data = {'name' : '', 'IP' : ''}
-        return cls.data
+        # if os.path.exists('./data/player.txt'):
+        #     lines = open('./data/player.txt', 'r').readlines()
+        #     cls.data = {'Name' : lines[0], 'IP' : lines[1]}
+        # else:
+            cls.data = {'Name' : '', 'IP' : ''}
+            return cls.data
 
     @classmethod
     def write(cls):
         with open('./data/player.txt', 'w') as file:
             file.writelines(cls.data.values())
 
-def deco_wait_dt(dt: float):
+    def __new__(cls): return cls.data
+
+class TimedAction:
+    def __new__(cls, func, dt: float, args = (), kwgs = {}):
+        t1 = t.perf_counter_ns()
+        val = func(*args, **kwgs)
+        if left := (dt - (t.perf_counter_ns() - t1) * 1e9) > 0:
+            print(left)
+            t.sleep(left)
+        return val
+
+def wait_until_dt(dt: float):
     def _(func, *args, **kwgs):
         t1 = t.perf_counter_ns()
         func(*args, **kwgs)
-        if (d:= t.perf_counter_ns() - t1) > 0:
-            t.sleep(d * 1_000_000)
+        if (d:= t.perf_counter_ns() - t1) < dt:
+            t.sleep(d * 1e9)
     return lambda func: lambda *args, **kwgs: _(func, *args, **kwgs)
 
 class Trigger:
@@ -330,8 +344,8 @@ class GUIWindowLayer:
         [wg.place(**p_info) for wg, p_info in self.collection.items()]
 
 class GUIWindow:
-    CURRENT: "GUIWindow"
-    DID_QUIT = False
+    current: "GUIWindow" = None
+    did_quit = False
     _instances: list["GUIWindow"] = []
     _initiated: tk.Tk | tk.Toplevel = ...
 
@@ -353,85 +367,83 @@ class GUIWindow:
         self.geometry = f'{size[0]}x{size[1]}+{a}+{b}'
         self.win.geometry(self.geometry)
         self.layer = None
+        GUIWindow.current = self
 
     def hide(self):
         self.win.withdraw()
         self.hidden = True
 
-    def show(self, layer: GUIWindowLayer, center: bool = False):
-        if self.hidden:
-            self.hidden = False
-
-        if center:
+    def show(self, layer: GUIWindowLayer, center_after: bool = False):
+        if center_after:
             self.win.geometry(self.geometry)
 
+        self.hidden = False
         [lyr.hide() for lyr in self.layers if lyr != layer]
         layer.show()
         self.layer = layer
         self.win.deiconify()
         self.win.focus_set()
-        self.CURRENT = self
+        GUIWindow.current = self
 
-    def mainloop(self):
-        self.win.mainloop()
-
-    def update(self):
-        self.win.update()
+    def mainloop(self): self.win.mainloop()
+    def update(self): self.win.update()
 
     @staticmethod
     def destroy():
-        GUIWindow.DID_QUIT = True
+        GUIWindow.did_quit = True
         GUIWindow._initiated.destroy()
 
     @staticmethod
     def switch_to(to: 'GUIWindow', which: GUIWindowLayer):
-        GUIWindow.CURRENT.hide()
+        if (GUIWindow.current is not which):
+            GUIWindow.current.hide()
         to.show(which)
 
 class GUIChat:
-    def __init__(self, coords: tuple, canv, font, fill: str):
+    def __init__(self, pad_coords: tuple[int, int], canv: tk.Canvas, font):
         self.canv = canv
-        self.x, self.y = coords
+        self.x, self.y = pad_coords
         self.font = tkf.Font(self.canv, font)
-        self.max_line_len = int(canv['scrollregion'].split(' ')[2]) - self.x
-        self.fill = fill
+        self.line_limit = int(canv['scrollregion'].split(' ')[2]) - self.x
+        self.colors = {}
 
-    def post(self, msg: str):
-        def add_char(char: str):
+    def set_colors(self, *, author = ..., msg = ..., sysmsg = ...):
+        if author != ...: self.colors['a'] = author
+        if msg != ...: self.colors['m'] = msg
+        if sysmsg != ...: self.colors['s'] = sysmsg
+
+    def post(self, message: list[tuple]):
+        def add_string(s: str, color: str = None):
             nonlocal x, y
-            if self.font.measure(char) + x + 1 > self.max_line_len:
-                x = self.x
-                y += LETTER_HEIGHT + 2
+            for char in s:
+                w = self.font.measure(char)
+                if w + x + 1 > self.line_limit or char == '\n':
+                    x = self.x
+                    y += CHAR_H_WITH_BUFF
+                    if char == '\n':
+                        continue
+                self.canv.create_text(
+                    x, y, text=char, anchor='nw', justify='left',
+                    font = self.font, fill=color)
+                x += w
 
-            self.canv.create_text(x, y, text=char, anchor='nw',
-                                    justify='left', font=self.font,
-                                    fill=color)
-            x += self.font.measure(char) + 1
+        CHAR_H_WITH_BUFF = 22
+        x, y = self.x, self.y
 
-        LETTER_HEIGHT = 20
-        colors = {
-            'Blue'   : '#55F', 'Red'   : '#F55', 'Purple' : '#608',
-            'Yellow' : '#FF1', 'Green' : '#1F1', ''       : self.fill
-        }
-        x, y, color = self.x, self.y, self.fill
+        while message:
+            author, text = message.pop(0)
+            if author == None:
+                add_string(text, self.colors['s'])
+            else:
+                add_string(author + ': ', self.colors['a'])
+                add_string(text, self.colors['m'])
+            if message:
+                add_string('\n')
 
-        while msg:
-            char, *msg = msg
-            if char == '#':
-                while char[-1] != '#' or len(char) == 1:
-                    char += msg[0]
-                    msg = msg[1:]
-                if char[1: -1].capitalize() in colors:
-                    color = colors[char[1:-1]]
-                else:
-                    [add_char(ch) for ch in char.join('##')]
-                continue
-            add_char(char)
-
-        self.y = y + LETTER_HEIGHT + 2
+        self.y = y + CHAR_H_WITH_BUFF
         scrollregion = [*map(int, self.canv['scrollregion'].split(' '))]
-        while scrollregion[3] - self.y < LETTER_HEIGHT + 2:
-            scrollregion[3] += LETTER_HEIGHT + 2
+        while scrollregion[3] - self.y < CHAR_H_WITH_BUFF:
+            scrollregion[3] += CHAR_H_WITH_BUFF
 
         self.canv.configure(scrollregion=scrollregion)
 
@@ -459,7 +471,7 @@ class Network:
 
     @staticmethod
     @_deco_ret_on_fail
-    def recvobj(sock_where: Socket):
+    def receive(sock_where: Socket):
         '''Receive an object from `sock_where`'''
         objlen = sock_where.recv(8).decode()
         if not objlen:
@@ -470,13 +482,15 @@ class Network:
             res += sock_where.recv(min(2048, objlen - len(res)))
         return pickle.loads(res)
 
-    @_deco_ret_on_fail
-    def sendobj(sock_where: Socket, obj) -> T.Union[None, Socket]:
-        '''Send object `obj` to `sock_where`\n\nreturn None on success'''
-        # print('sent', obj)
+    @staticmethod
+    def send(sock_where: Socket, obj):
+        '''Send object `obj` to `sock_where`'''
         obj = pickle.dumps(obj)
         obj = str(len(obj)).zfill(8).encode() + obj
-        return sock_where.sendall(obj)
+        try:
+            return sock_where.sendall(obj) is None
+        except Exception:
+            return False
 
     @staticmethod
     def validate_ip(ip: str):
@@ -486,8 +500,40 @@ class Network:
 
         for arg in ip:
             # if not numeric or is starting with '0' while != 0
-            if not arg.isdigit() \
-                or (arg.startswith('0') and len(arg) > 1) \
-                or 0 > int(arg) >= 256:
+            if not arg.isdigit() or (arg.startswith('0') and len(arg) > 1) \
+                    or 0 > int(arg) >= 256:
                 return False
         return True
+
+class PokerServer:
+    def __init__(self, port: int):
+        self.sock = Socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(('', port))
+        self.sock.listen(9)
+        self.conns = {
+            self.sock : {
+                'Name' : PlayerData()['Name'], 'ID' : 0, 'Pending' : False
+            }
+        }
+        self.readers, self.listeners = [self.sock], []
+
+    def start(self, tr_started: Trigger, tr_cancelled: Trigger):
+        def _upd():
+            lst_read, lst_send, _ = sel.select(
+                self.readers, self.listeners, [])
+            for conn in lst_read: ...
+            for conn in lst_send: ...
+            print('Thread alive')
+
+        def inner(t_started: Trigger, t_cancelled: Trigger):
+            while not (t_started or t_cancelled):
+                TimedAction(_upd, 1/60)
+            print('Thread dies')
+
+        self.tr_started = tr_started
+        self.tr_cancelled = tr_cancelled
+        self.worker = thr.Thread(
+            target=inner,
+            args=(self.tr_started, self.tr_cancelled)
+            )
+        self.worker.start()
