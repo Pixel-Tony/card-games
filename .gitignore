@@ -1,8 +1,12 @@
 
 workspace.code-workspace
 .vscode/
-src/__pycache__
+src
 test.py
-src/idea_dump.py
-utils/fool.py
+utils/
 tools/
+OLDD/
+src/
+data/
+OLDD/main.py
+__pycache__/
