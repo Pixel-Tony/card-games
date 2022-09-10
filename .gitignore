@@ -1,4 +1,3 @@
-
 workspace.code-workspace
 .vscode/
 src
@@ -10,3 +9,5 @@ src/
 data/
 OLDD/main.py
 __pycache__/
+main2.py
+GUI.py
