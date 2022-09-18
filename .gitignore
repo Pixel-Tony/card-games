@@ -6,3 +6,5 @@ workspace.code-workspace
 test.py
 GUI.py
 main2.py
+cli.py
+pyrightconfig.json

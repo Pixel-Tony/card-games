@@ -1,8 +1,7 @@
-# Constants section
 import enum
 import random
 import os.path
-import socket
+import socket as s
 import pickle
 import typing as T
 import tkinter as tk
@@ -14,7 +13,9 @@ import select as sel
 from urllib import request as urlreq
 from urllib.error import URLError
 
-
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Constants
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 class Colors(str, enum.Enum):
     WHITE = '#fff'
     LGREY = '#e0f0e0'
@@ -27,51 +28,63 @@ class Colors(str, enum.Enum):
     GOLD = '#ff3'
 
 class Fonts(tuple, enum.Enum):
-    HEAD = 'Century Gothic', '14', 'bold'
-    MIDDLE = 'Century Gothic', '12', 'bold'
-    LOW = 'Century Gothic', '11', 'bold'
-    PLAYER_TABLE = 'Helvetica', '12', 'bold'
-    CHAT = 'Helvetica', '10', 'bold'
-    GAME_NAMES = 'Helvetica', '10', 'bold'
+    C14B = 'Century Gothic', '14', 'bold'
+    C12B = 'Century Gothic', '12', 'bold'
+    C11B = 'Century Gothic', '11', 'bold'
+    H12B = 'Helvetica', '12', 'bold'
+    H11B = 'Helvetica', '11', 'bold'
+    H10B = 'Helvetica', '10', 'bold'
+
+class PokerActionType(str, enum.Enum):
+    CHECK = 'check'
+    BET = 'bet'
+    RAISE = 'raise'
+    CALL = 'call'
+    FOLD = 'fold'
+    SHOW = 'show'
+    MUCK = 'muck'
+    QUIT = 'quit'
 
 SUITS = SPADE, HEART, CLUB, DIAMOND = '♠♥♣♦'
-ORDER = [*range(2, 11), *'JQKA']  # 2 3 ... 10 J K Q A
+ORDER = [*range(2, 11), *'JQKA']
 DECK = [(index, suit) for suit in SUITS for index in ORDER]
 
-GC_SUCCESS = 0
-GC_FAIL = 1
-GC_ERR_LOBBY_FULL = 10
-GC_ERR_LOBBY_CLOSING = 11
-GC_ERR_CONN_BROKE = 20
-GC_EVENT = 2
-GC_DISCONNECT = 6
+TITLE = "Tony\'s Card Games Catalogue"
 
-CNF_MENU_BUTTON = {
-    'font': Fonts.HEAD,
-    'bg': 'DeepSkyBlue3',
-    'activebackground': 'DeepSkyBlue2'
-}
+S_TIMEOUT = 1
+# Event codes
+EV_SUCCESS = 0
+EV_FAILURE = 1
+
+EV_S_EMPTY = 2
+EV_S_RECEIVED = 3
+EV_S_ERR_CLOSED = 4
+EV_S_ERR_TIMEOUT = 5
+EV_S_ERR_ON_ANSWER = 6
+
+EV_L_ERR_FULL = 7
+EV_L_CLOSED = 8
+EV_L_UPD_NAMES = 9
+EV_L_NAME_SUPPLY = 10
+
+EV_GAME_P_QUIT = 11
+
+EV_S_ERRS = {EV_S_ERR_CLOSED, EV_S_ERR_TIMEOUT, EV_S_ERR_ON_ANSWER}
+
+# Widget configs
+CNF_MENU_BUTTON = {'font': Fonts.C14B, 'bg': 'DeepSkyBlue3',
+                   'activebackground': 'DeepSkyBlue2'}
 CNF_LABEL = {'bg': Colors.BG, 'fg': 'white'}
-CNF_ENTRY = {'font' : Fonts.MIDDLE, 'bg' : 'CadetBlue1'}
+CNF_ENTRY = {'font': Fonts.C12B, 'bg': 'CadetBlue1'}
 
-B_STATES = ['disabled', 'normal']
+B_STATES = ('disabled', 'normal')
 
-class PokerActionType(enum.Enum):
-    CHECK = 'Check'
-    BET = 'Bet'
-    RAISE = 'Raise'
-    CALL = 'Call'
-    FOLD = 'Fold'
-    SHOW = 'Show'
-    MUCK = 'Muck'
-    QUIT = 'Quit'
-
+# Type aliases
 CardRank = T.Union[int, str]
 CardSuit = str
-CardValue = tuple[CardRank, CardSuit]
-Socket = socket.socket
-
-TITLE = "Tony\'s Card Games Catalogue"
+CardValueType = tuple[CardRank, CardSuit]
+EventCodeType = int
+EventType = dict
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # App functionality section
@@ -85,7 +98,7 @@ class PlayerData:
         #     lines = open('./data/player.txt', 'r').readlines()
         #     cls.data = {'Name' : lines[0], 'IP' : lines[1]}
         # else:
-            cls.data = {'Name' : '', 'IP' : ''}
+            cls.data = {'name': '', 'ip': ''}
             return cls.data
 
     @classmethod
@@ -104,7 +117,7 @@ class TimedAction:
             t.sleep(left)
         return val
 
-def wait_until_dt(dt: float):
+def spend_no_less_than(dt: float):
     def _(func, *args, **kwgs):
         t1 = t.perf_counter_ns()
         func(*args, **kwgs)
@@ -113,15 +126,19 @@ def wait_until_dt(dt: float):
     return lambda func: lambda *args, **kwgs: _(func, *args, **kwgs)
 
 class Trigger:
-    def __init__(self, state = False): self.state = bool(state)
+    '''Wrapper around False with single method to switch truthy'''
+    __slots__ = ['state']
+    def __init__(self): self.state = False
     def __bool__(self): return self.state
     def __repr__(self): return f'<BoolTrigger, state={self.state}>'
-    def toggle(self): self.state = not self.state
+    def pull(self): self.state = True
 
 class PokerHand:
-    name: str
-    hand = [0]
-    kicker: list[int] = None
+    __slots__ = ['name', 'hand', 'kicker']
+    def __init__(self) -> None:
+        self.name = self.kicker = None
+        self.hand = [0]
+
     def __eq__(self, other: 'PokerHand'):
         return self.hand == other.hand and self.kicker == other.kicker
 
@@ -129,12 +146,16 @@ class PokerHand:
 
 class Poker:
     @staticmethod
-    def deal_cards(p_num: int, omaha: bool):
+    def deal_cards(p_num: int, omaha: bool) -> list[CardValueType]:
         return [random.choice(DECK) for i in range(p_num*(2 + 2*omaha) + 5)]
 
     @staticmethod
-    def create_hand(cards: T.Iterable[CardValue]):
-        '''Return the best possible Texas Hold'em Poker hand of available with input cards\n```
+    def create_hand(cards: T.Iterable[CardValueType]):
+        '''
+        Return the best possible Texas Hold'em Poker hand
+        of available with input cards
+        \n
+        ```
         | 10 - Flush Royale | 9 - Straight flush
         | 8 - Four          | 7 - Full House
         | 6 - Flush         | 5 - Straight
@@ -236,8 +257,8 @@ class Poker:
         return best
 
     @staticmethod
-    def best_hand(player_cards: list['CardValue'],
-                  table_cards: list['CardValue'],
+    def best_hand(player_cards: list['CardValueType'],
+                  table_cards: list['CardValueType'],
                   omaha: bool
                   ):
         if not omaha:
@@ -340,22 +361,29 @@ class GUIWindowLayer:
     def hide(self):
         [wg.place_forget() for wg in self.collection]
 
-    def show(self):
-        [wg.place(**p_info) for wg, p_info in self.collection.items()]
+    def show(self, *, leave: list[tk.Widget]):
+        [wg.place(p_info)
+            if wg not in leave
+                else wg.place_forget()
+                    for wg, p_info in self.collection.items()]
 
 class GUIWindow:
     current: "GUIWindow" = None
-    did_quit = False
-    _instances: list["GUIWindow"] = []
-    _initiated: tk.Tk | tk.Toplevel = ...
+    '''Current (last if hidden) window displaying'''
+
+    destroyed = False
+    '''Was application destoyed?'''
+
+    _main_instance: tk.Tk | tk.Toplevel = ...
 
     def __init__(self, size: tuple, title: str, bg: str = ...):
         self.layers: list[GUIWindowLayer] = []
-        if GUIWindow._initiated == ...:
-            GUIWindow._initiated = self.win = tk.Tk()
+        if GUIWindow._main_instance == ...:
+            GUIWindow._main_instance = self.win = tk.Tk()
         else:
-            self.win = tk.Toplevel(GUIWindow._initiated)
-        self.win.protocol("WM_DELETE_WINDOW", GUIWindow.destroy)
+            self.win = tk.Toplevel(GUIWindow._main_instance)
+        self.win.withdraw()
+        self.win.protocol("WM_DELETE_WINDOW", GUIWindow.app_quit)
         self.win.resizable(0, 0)
         self.win.title(title)
         if bg != ...:
@@ -373,13 +401,24 @@ class GUIWindow:
         self.win.withdraw()
         self.hidden = True
 
-    def show(self, layer: GUIWindowLayer, center_after: bool = False):
+    def show(self,
+             layer: GUIWindowLayer,
+             center_after = False,
+             hide: list[tk.Widget] = ...
+             ):
+        '''
+        Shows requested layer.
+
+        :param center_after: Do align window as on app start
+        :param hide: List of widgets that are left hidden
+        '''
+
         if center_after:
             self.win.geometry(self.geometry)
 
         self.hidden = False
         [lyr.hide() for lyr in self.layers if lyr != layer]
-        layer.show()
+        layer.show(leave=(hide if hide != ... else []))
         self.layer = layer
         self.win.deiconify()
         self.win.focus_set()
@@ -389,13 +428,13 @@ class GUIWindow:
     def update(self): self.win.update()
 
     @staticmethod
-    def destroy():
-        GUIWindow.did_quit = True
-        GUIWindow._initiated.destroy()
+    def app_quit():
+        GUIWindow.destroyed = True
+        GUIWindow._main_instance.quit()
 
     @staticmethod
     def switch_to(to: 'GUIWindow', which: GUIWindowLayer):
-        if (GUIWindow.current is not which):
+        if to is not GUIWindow.current:
             GUIWindow.current.hide()
         to.show(which)
 
@@ -452,88 +491,89 @@ class GUIChat:
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 class Network:
     @staticmethod
-    def _deco_ret_on_fail(func):
-        def _(*args):
-            try:
-                return func(*args)
-            except Exception as e:
-                return args
-        return _
-
-    @staticmethod
     def ip_get() -> str:
         try:
             ip = urlreq.urlopen("https://ident.me", timeout=1.5
             ).read().decode("utf8")
         except URLError:
-            ip = socket.gethostbyname(socket.gethostname())
+            ip = s.gethostbyname(s.gethostname())
         return ip
 
     @staticmethod
-    @_deco_ret_on_fail
-    def receive(sock_where: Socket):
-        '''Receive an object from `sock_where`'''
-        objlen = sock_where.recv(8).decode()
-        if not objlen:
-            return None
-        objlen = int(objlen)
-        res = b''
-        while len(res) < objlen:
-            res += sock_where.recv(min(2048, objlen - len(res)))
-        return pickle.loads(res)
+    def receive(__sock: s.socket) -> object:
+        '''
+        Receive decoded object from socket
+
+        Can throw: EV_S_ERR_CLOSED, EV_S_ERR_TIMEOUT
+        '''
+        try:
+            objlen = __sock.recv(8).decode()
+            if not objlen:
+                return EV_S_ERR_CLOSED
+            objlen = int(objlen)
+            res = b''
+            while len(res) < objlen:
+                res += __sock.recv(min(2048, objlen - len(res)))
+            return pickle.loads(res)
+        except TimeoutError:
+            return EV_S_ERR_TIMEOUT
 
     @staticmethod
-    def send(sock_where: Socket, obj):
-        '''Send object `obj` to `sock_where`'''
+    def send(s: s.socket, obj) -> bool:
+        '''Send object to socket, return 1 on success'''
         obj = pickle.dumps(obj)
         obj = str(len(obj)).zfill(8).encode() + obj
         try:
-            return sock_where.sendall(obj) is None
+            return s.sendall(obj) is None
         except Exception:
             return False
 
     @staticmethod
     def validate_ip(ip: str):
+        if ip.lower() == 'localhost':
+            return True
         ip = ip.split('.')
         if len(ip) != 4:
             return False
 
         for arg in ip:
-            # if not numeric or is starting with '0' while != 0
-            if not arg.isdigit() or (arg.startswith('0') and len(arg) > 1) \
-                    or 0 > int(arg) >= 256:
+            if not arg.isdigit() or str(int(arg)) != arg or int(arg) > 255:
                 return False
         return True
 
-class PokerServer:
-    def __init__(self, port: int):
-        self.sock = Socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(('', port))
-        self.sock.listen(9)
-        self.conns = {
-            self.sock : {
-                'Name' : PlayerData()['Name'], 'ID' : 0, 'Pending' : False
-            }
-        }
-        self.readers, self.listeners = [self.sock], []
+    @staticmethod
+    def ask(sock: s.socket, obj: T.Any):
+        '''
+        Send object to socket
+        and return bool(received is corresponding success event)
 
-    def start(self, tr_started: Trigger, tr_cancelled: Trigger):
-        def _upd():
-            lst_read, lst_send, _ = sel.select(
-                self.readers, self.listeners, [])
-            for conn in lst_read: ...
-            for conn in lst_send: ...
-            print('Thread alive')
+        Can throw: EV_S_ERR_CLOSED, EV_S_ERR_TIMEOUT
+        '''
+        return (Network.send(sock, obj)
+            and Network.receive(sock) == EV_S_RECEIVED)
 
-        def inner(t_started: Trigger, t_cancelled: Trigger):
-            while not (t_started or t_cancelled):
-                TimedAction(_upd, 1/60)
-            print('Thread dies')
+    def answer(sock: s.socket) -> object | EventCodeType:
+        value = Network.receive(sock)
+        if (value == EV_S_ERR_CLOSED or value == EV_S_ERR_TIMEOUT
+            or Network.send(sock, EV_S_RECEIVED)):
+            return value
+        else:
+            return EV_S_ERR_ON_ANSWER
 
-        self.tr_started = tr_started
-        self.tr_cancelled = tr_cancelled
-        self.worker = thr.Thread(
-            target=inner,
-            args=(self.tr_started, self.tr_cancelled)
-            )
-        self.worker.start()
+class Queue:
+    '''Thread-safe queue'''
+    EMPTY = object()
+
+    def __init__(self):
+        self.lock, self.q = thr.Lock(), []
+
+    def __len__(self):
+        return len(self.q)
+
+    def push(self, value: object):
+        with self.lock:
+            self.q.append(value)
+
+    def get(self):
+        with self.lock:
+            return Queue.EMPTY if not len(self.q) else self.q.pop(0)
